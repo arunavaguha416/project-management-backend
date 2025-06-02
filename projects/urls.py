@@ -13,6 +13,6 @@ urlpatterns = [
     path('projects/details/', ProjectDetails.as_view(), name='project-details'),
     path('projects/update/', ProjectUpdate.as_view(), name='project-update'),
     path('projects/publish/', ChangeProjectPublishStatus.as_view(), name='project-publish'),
-    path('projects/delete/<int:project_id>/', ProjectDelete.as_view(), name='project-delete'),
+    path('projects/delete/<uuid:project_id>/', ProjectDelete.as_view(), name='project-delete'),
     path('projects/restore/', RestoreProject.as_view(), name='project-restore'),
 ]

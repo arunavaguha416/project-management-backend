@@ -2,8 +2,10 @@ from django.db import models
 from django.contrib.auth.models import User
 from projects.models.project_model import Project
 from django.utils.translation import gettext_lazy as _
+from project_management.softDeleteModel import SoftDeletionModel
+import uuid
 
-class Task(models.Model):
+class Task(SoftDeletionModel):
     STATUS_CHOICES = [
         ('TODO', 'To Do'),
         ('IN_PROGRESS', 'In Progress'),
@@ -15,6 +17,10 @@ class Task(models.Model):
         ('HIGH', 'High'),
     ]
 
+    id = models.UUIDField(primary_key=True, 
+                        default=uuid.uuid4, 
+                        editable=False, 
+                        unique=True)
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='TODO')
