@@ -25,4 +25,5 @@ urlpatterns = [
     path('api/comments/', include('comments.urls')),
     path('api/discussions/', include('discussions.urls')),
     path('api/hr_management/', include('hr_management.urls')),
+    path('api/notifications/', include('notifications.urls')),
 ]

@@ -47,7 +47,7 @@ INSTALLED_APPS = [
     'comments',
     'discussions',
     'hr_management',
-    # 'notifications',
+    'notifications',
     # 'attachments',
     # 'time_tracking',
     # 'teams',
