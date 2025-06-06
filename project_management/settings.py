@@ -48,9 +48,9 @@ INSTALLED_APPS = [
     'discussions',
     'hr_management',
     'notifications',
-    # 'attachments',
-    # 'time_tracking',
-    # 'teams',
+    'attachments',
+    'time_tracking',
+    'teams',
     'corsheaders',
 ]
 
@@ -96,9 +96,9 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 CORS_ORIGIN_ALLOW_ALL = True
 
-# AUTH_USER_MODEL = 'authentication.User'
-
 ROOT_URLCONF = 'project_management.urls'
+AUTH_USER_MODEL = 'authentication.User'
+
 
 TEMPLATES = [
     {

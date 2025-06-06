@@ -27,7 +27,7 @@ class UserManager(BaseUserManager):
 
 
 
-class User(AbstractBaseUser, PermissionsMixin):
+class User(AbstractBaseUser, PermissionsMixin, SoftDeletionModel):
     id = models.UUIDField(primary_key=True, 
                         default=uuid.uuid4, 
                         editable=False, 

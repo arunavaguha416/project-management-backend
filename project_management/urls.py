@@ -19,11 +19,18 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/auth/', include('authentication.urls')),
+    path('api/authentication/', include('authentication.urls')),
     path('api/projects/', include('projects.urls')),
     path('api/tasks/', include('tasks.urls')),
     path('api/comments/', include('comments.urls')),
     path('api/discussions/', include('discussions.urls')),
     path('api/hr_management/', include('hr_management.urls')),
     path('api/notifications/', include('notifications.urls')),
+    path('api/attachments/', include('attachments.urls')),
+    path('api/comments/', include('comments.urls')),
+    path('api/hr_management/', include('hr_management.urls')),
+    path('api/projects/', include('projects.urls')),
+    path('api/tasks/', include('tasks.urls')),
+    path('api/teams/', include('teams.urls')),
+    path('api/time_tracking/', include('time_tracking.urls')),
 ]

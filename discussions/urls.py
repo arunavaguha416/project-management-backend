@@ -1,14 +1,14 @@
 from django.urls import path
-from . import views
+from .views.discussions_view import *
 
 urlpatterns = [
-    path('discussions/add/', views.CommentAdd.as_view(), name='comment-add'),
-    path('discussions/list/', views.CommentList.as_view(), name='comment-list'),
-    path('discussions/published/', views.PublishedCommentList.as_view(), name='comment-published'),
-    path('discussions/deleted/', views.DeletedCommentList.as_view(), name='comment-deleted'),
-    path('discussions/details/', views.CommentDetails.as_view(), name='comment-details'),
-    path('discussions/update/', views.CommentUpdate.as_view(), name='comment-update'),
-    path('discussions/publish/', views.ChangeCommentPublishStatus.as_view(), name='comment-publish'),
-    path('discussions/delete/<uuid:comment_id>/', views.CommentDelete.as_view(), name='comment-delete'),
-    path('discussions/restore/', views.RestoreComment.as_view(), name='comment-restore'),
+    path('discussions/add/', DiscussionAdd.as_view(), name='discussion-add'),
+    path('discussions/list/', DiscussionList.as_view(), name='discussion-list'),
+    path('discussions/published/', PublishedDiscussionList.as_view(), name='discussion-published'),
+    path('discussions/deleted/', DeletedDiscussionList.as_view(), name='discussion-deleted'),
+    path('discussions/details/', DiscussionDetails.as_view(), name='discussion-details'),
+    path('discussions/update/', DiscussionUpdate.as_view(), name='discussion-update'),
+    path('discussions/publish/', ChangeDiscussionPublishStatus.as_view(), name='discussion-publish'),
+    path('discussions/delete/<uuid:comment_id>/', DiscussionDelete.as_view(), name='discussion-delete'),
+    path('discussions/restore/', RestoreDiscussion.as_view(), name='discussion-restore'),
 ]

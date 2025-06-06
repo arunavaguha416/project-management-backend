@@ -8,7 +8,6 @@ from ..serializers.serializer import *
 from django.contrib.auth import authenticate
 from django.contrib.auth.signals import user_logged_in
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.db import IntegrityError
 
 class Login(APIView):
     """

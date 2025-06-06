@@ -1,9 +1,5 @@
 from django.urls import path
-from .views import (
-    TaskAdd, TaskList, PublishedTaskList, DeletedTaskList,
-    TaskDetails, TaskUpdate, ChangeTaskPublishStatus,
-    TaskDelete, RestoreTask
-)
+from .views.views import *
 
 urlpatterns = [
     path('tasks/add/', TaskAdd.as_view(), name='task-add'),

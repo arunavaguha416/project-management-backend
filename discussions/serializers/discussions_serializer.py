@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from discussions.models.discussions_model import Discussion
 
-class CommentSerializer(serializers.ModelSerializer):
+class DiscussionSerializer(serializers.ModelSerializer):
     created_at = serializers.ReadOnlyField()
     updated_at = serializers.ReadOnlyField()
     

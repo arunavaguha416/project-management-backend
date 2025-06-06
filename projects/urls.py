@@ -1,9 +1,5 @@
 from django.urls import path
-from .views import (
-    ProjectAdd, ProjectList, PublishedProjectList, DeletedProjectList,
-    ProjectDetails, ProjectUpdate, ChangeProjectPublishStatus,
-    ProjectDelete, RestoreProject
-)
+from .views.views import *
 
 urlpatterns = [
     path('projects/add/', ProjectAdd.as_view(), name='project-add'),
