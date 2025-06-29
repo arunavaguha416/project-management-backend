@@ -1,5 +1,5 @@
-# Geological Data Store Backend
- Geological Data Store Website Project
+# Project Management Backend
+Project Management Backend
 
     Creating a Virtual Env
     python -m venv venv
