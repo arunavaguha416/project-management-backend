@@ -28,6 +28,11 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin, SoftDeletionModel):
+
+    class userRole(models.TextChoices):
+        ADMIN='ADMIN'
+        USER='USER'
+
     id = models.UUIDField(primary_key=True, 
                         default=uuid.uuid4, 
                         editable=False, 
@@ -35,13 +40,12 @@ class User(AbstractBaseUser, PermissionsMixin, SoftDeletionModel):
     name = models.CharField(max_length=100)
     email = models.EmailField(unique=True)
     avatar = models.URLField(blank=True, null=True)
-    department = models.CharField(max_length=100, blank=True)
     salary = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
-
+    role = models.CharField(max_length=10, choices=userRole.choices, null=True, blank=True, db_index=True)
     objects = UserManager()
 
     USERNAME_FIELD = 'email'

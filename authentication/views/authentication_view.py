@@ -23,6 +23,7 @@ class Login(APIView):
         try:
             username = request.data.get('username')
             password = request.data.get('password')
+            isAdmin = request.data.get('is_admin', False)
             
             # Authenticate user with provided credentials
             user = authenticate(username=username, password=password)
@@ -32,7 +33,33 @@ class Login(APIView):
                 token = RefreshToken.for_user(user)
                 
                 # Handle different login scenarios based on user type and requested login type
-                if user.is_superuser is True:
+                if isAdmin is True and user.is_superuser is True:
+                    return Response({
+                        'status': True,
+                        'message': 'Admin login successful',
+                        'username': username,
+                        'is_admin': user.is_superuser,
+                        'refresh': str(token),
+                        'access': str(token.access_token),
+                    }, status=status.HTTP_200_OK)
+                    
+                elif isAdmin is True and user.is_superuser is False:
+                    return Response({
+                        'status': False,
+                        'message': 'The user is not admin'
+                    }, status=status.HTTP_203_NON_AUTHORITATIVE_INFORMATION)
+                    
+                elif isAdmin is False and user.is_superuser is False:
+                    return Response({
+                        'status': True,
+                        'message': 'User login successful',
+                        'username': username,
+                        'is_admin': user.is_superuser,
+                        'refresh': str(token),
+                        'access': str(token.access_token),
+                    }, status=status.HTTP_200_OK)
+                    
+                elif isAdmin is False and user.is_superuser is True:
                     return Response({
                         'status': False,
                         'message': 'Please redirect to Admin panel for Admin login'

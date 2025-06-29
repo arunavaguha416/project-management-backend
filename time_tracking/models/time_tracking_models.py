@@ -11,15 +11,13 @@ class TimeEntry(SoftDeletionModel):
                         default=uuid.uuid4, 
                         editable=False, 
                         unique=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='time_entries')
-    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='time_entries')
+    user_id = models.ForeignKey(User, on_delete=models.CASCADE)    
     duration = models.DurationField()  # e.g., '01:30:00' for 1 hour 30 minutes
     date = models.DateField()
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
-    published_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.name

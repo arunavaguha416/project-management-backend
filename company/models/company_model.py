@@ -1,18 +1,17 @@
+# department/models.py
 from django.db import models
-from django.contrib.auth.models import User
-from django.utils.translation import gettext_lazy as _
 from project_management.softDeleteModel import SoftDeletionModel
 import uuid
+from authentication.models.user import User
 
-
-class Project(SoftDeletionModel):
+# Define the Department model to represent organizational units
+class Company(SoftDeletionModel):
     id = models.UUIDField(primary_key=True, 
                         default=uuid.uuid4, 
                         editable=False, 
                         unique=True)
-    name = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
-    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    name = models.CharField(max_length=100, unique=True,)
+    description = models.TextField(blank=True)    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -20,8 +19,5 @@ class Project(SoftDeletionModel):
         return self.name
 
     class Meta:
-        verbose_name = _('Project')
-        verbose_name_plural = _('Projects')
-
-
-
+        verbose_name = "Company"
+        verbose_name_plural = "Companies"
