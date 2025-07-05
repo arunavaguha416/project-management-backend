@@ -45,10 +45,10 @@ INSTALLED_APPS = [
     'projects',
     'discussions',
     'hr_management',
-    'notifications',
     'time_tracking',
     'teams',
     'corsheaders',
+    'depertment',
 ]
 
 MIDDLEWARE = [

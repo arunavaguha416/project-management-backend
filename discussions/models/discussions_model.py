@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import User
+from authentication.models.user import User
 from django.utils.translation import gettext_lazy as _
 from project_management.softDeleteModel import SoftDeletionModel
 from projects.models.project_model import Project

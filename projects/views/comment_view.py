@@ -3,10 +3,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from django.db.models import Q
-from comments.models.comment_model import Comment
-from comments.serializers.comment_serializer import CommentSerializer
+from projects.models.comments_model import Comment
+from  projects.serializers.comment_serializer import CommentSerializer
 from django.core.paginator import Paginator
-import datetime
+
 
 class CommentAdd(APIView):
     permission_classes = (IsAuthenticated,)

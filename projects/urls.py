@@ -1,19 +1,19 @@
 from django.urls import path
 from .views.projects_views import *
-from ..projects.views.task_views import *
-from ..projects.views.comment_view import *
+from .views.task_views import *
+from .views.comment_view import *
 
 
 urlpatterns = [
-    path('projects/add/', ProjectAdd.as_view(), name='project-add'),
-    path('projects/list/', ProjectList.as_view(), name='project-list'),
-    path('projects/published/', PublishedProjectList.as_view(), name='project-published'),
-    path('projects/deleted/', DeletedProjectList.as_view(), name='project-deleted'),
-    path('projects/details/', ProjectDetails.as_view(), name='project-details'),
-    path('projects/update/', ProjectUpdate.as_view(), name='project-update'),
-    path('projects/publish/', ChangeProjectPublishStatus.as_view(), name='project-publish'),
-    path('projects/delete/<uuid:project_id>/', ProjectDelete.as_view(), name='project-delete'),
-    path('projects/restore/', RestoreProject.as_view(), name='project-restore'),
+    path('add/', ProjectAdd.as_view(), name='project-add'),
+    path('list/', ProjectList.as_view(), name='project-list'),
+    path('published/', PublishedProjectList.as_view(), name='project-published'),
+    path('deleted/', DeletedProjectList.as_view(), name='project-deleted'),
+    path('details/', ProjectDetails.as_view(), name='project-details'),
+    path('update/', ProjectUpdate.as_view(), name='project-update'),
+    path('publish/', ChangeProjectPublishStatus.as_view(), name='project-publish'),
+    path('delete/<uuid:project_id>/', ProjectDelete.as_view(), name='project-delete'),
+    path('restore/', RestoreProject.as_view(), name='project-restore'),
 
     path('tasks/add/', TaskAdd.as_view(), name='task-add'),
     path('tasks/list/', TaskList.as_view(), name='task-list'),

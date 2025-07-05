@@ -3,8 +3,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from django.db.models import Q
-from tasks.models.task_model import Task
-from tasks.serializers.task_serializer import TaskSerializer
+from projects.models.task_model import Task
+from projects.serializers.task_serializer import TaskSerializer
 from django.core.paginator import Paginator
 import datetime
 

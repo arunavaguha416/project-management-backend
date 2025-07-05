@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import User
+from authentication.models.user import User
 from django.utils.translation import gettext_lazy as _
 from project_management.softDeleteModel import SoftDeletionModel
 import uuid
@@ -27,11 +27,11 @@ class Employee(SoftDeletionModel):
     
 
 class LeaveRequest(SoftDeletionModel):
-    STATUS_TYPES = [
-        ('Pending'),
-        ('Approved'),
-        ('Rejected'),
-    ]
+    STATUS_TYPES = (
+        ('PENDING', 'Pending'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    )
 
     id = models.UUIDField(primary_key=True, 
                         default=uuid.uuid4, 
