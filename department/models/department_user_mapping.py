@@ -3,10 +3,10 @@ from django.db import models
 from project_management.softDeleteModel import SoftDeletionModel
 import uuid
 from authentication.models.user import User
-from .depertment_model import Department
+from .department_model import Department
 
 # Define the Department model to represent organizational units
-class DepertmentUSerMapping(SoftDeletionModel):
+class DepartmentUSerMapping(SoftDeletionModel):
     id = models.UUIDField(primary_key=True, 
                         default=uuid.uuid4, 
                         editable=False, 
@@ -20,5 +20,5 @@ class DepertmentUSerMapping(SoftDeletionModel):
         return self.name
 
     class Meta:
-        verbose_name = "DepertmentUSerMapping"
-        verbose_name_plural = "DepertmentUSerMappings"
+        verbose_name = "DepartmentUSerMapping"
+        verbose_name_plural = "DepartmentUSerMappings"

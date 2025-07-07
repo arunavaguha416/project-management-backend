@@ -1,6 +1,6 @@
 # department/serializers.py
 from rest_framework import serializers
-from ..models.depertment_model import Department
+from ..models.department_model import Department
 from authentication.models.user import User
 
 # Serializer for the Department model

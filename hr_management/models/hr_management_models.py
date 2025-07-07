@@ -3,7 +3,7 @@ from authentication.models.user import User
 from django.utils.translation import gettext_lazy as _
 from project_management.softDeleteModel import SoftDeletionModel
 import uuid
-from depertment.models.depertment_model import Department
+from department.models.department_model import Department
 
 class Employee(SoftDeletionModel):
     id = models.UUIDField(primary_key=True, 

@@ -1,6 +1,6 @@
 # department/urls.py
 from django.urls import path
-from .views.depertment_view import *
+from .views.department_view import *
 
 # URL patterns for department-related API endpoints
 urlpatterns = [

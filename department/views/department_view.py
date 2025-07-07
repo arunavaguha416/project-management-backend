@@ -4,8 +4,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from django.db.models import Q
-from ..models.depertment_model import Department
-from ..serializers.depertment_serializers import DepartmentSerializer
+from ..models.department_model import Department
+from ..serializers.department_serializers import DepartmentSerializer
 from django.core.paginator import Paginator
 import datetime
 
@@ -41,38 +41,27 @@ class DepartmentList(APIView):
 
     def post(self, request):
         try:
-            search_data = request.data
-            page = search_data.get('page')
-            page_size = search_data.get('page_size', 10)
-            search_name = search_data.get('name', '')
-            search_description = search_data.get('description', '')
+            # search_data = request.data
+            # page = search_data.get('page')
+            # page_size = search_data.get('page_size', 10)
+            # search_name = search_data.get('name', '')
+            # search_description = search_data.get('description', '')
 
             query = Q()
-            if search_name:
-                query &= Q(name__icontains=search_name)
-            if search_description:
-                query &= Q(description__icontains=search_description)
+            # if search_name:
+            #     query &= Q(name__icontains=search_name)
+            # if search_description:
+            #     query &= Q(description__icontains=search_description)
 
             departments = Department.objects.filter(query).order_by('-created_at')
 
-            if departments.exists():
-                if page is not None:
-                    paginator = Paginator(departments, page_size)
-                    paginated_departments = paginator.get_page(page)
-                    serializer = DepartmentSerializer(paginated_departments, many=True)
-                    return Response({
-                        'status': True,
-                        'count': paginator.count,
-                        'num_pages': paginator.num_pages,
-                        'records': serializer.data
-                    }, status=status.HTTP_200_OK)
-                else:
-                    serializer = DepartmentSerializer(departments, many=True)
-                    return Response({
-                        'status': True,
-                        'count': departments.count(),
-                        'records': serializer.data
-                    }, status=status.HTTP_200_OK)
+            if departments.exists():                    
+                serializer = DepartmentSerializer(departments, many=True)
+                return Response({
+                    'status': True,
+                    'count': departments.count(),
+                    'records': serializer.data
+                }, status=status.HTTP_200_OK)
             else:
                 return Response({
                     'status': False,

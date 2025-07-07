@@ -4,7 +4,7 @@ from authentication.models.user import User
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'name', 'email', 'avatar', 'department', 'salary']
+        fields = ['id', 'name', 'email', 'department', 'salary']
 
 class ChangePasswordSerializer(serializers.Serializer):
     username = serializers.CharField(required=True)
