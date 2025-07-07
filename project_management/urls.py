@@ -26,5 +26,5 @@ urlpatterns = [
     path('api/hr_management/', include('hr_management.urls')),
     path('api/teams/', include('teams.urls')),
     path('api/time_tracking/', include('time_tracking.urls')),
-    path('api/depertment/', include('depertment.urls')),
+    path('api/department/', include('department.urls')),
 ]

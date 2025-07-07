@@ -18,9 +18,6 @@ class Comment(SoftDeletionModel):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
-    def __str__(self):
-        return self.name
-
     class Meta:
         verbose_name = _('Comment')
         verbose_name_plural = _('Comments')

@@ -29,9 +29,6 @@ class Notification(SoftDeletionModel):
     deleted_at = models.DateTimeField(null=True, blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
 
-    def __str__(self):
-        return self.name
-
     class Meta:
         verbose_name = _('Notification')
         verbose_name_plural = _('Notifications')

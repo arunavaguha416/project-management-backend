@@ -48,7 +48,7 @@ INSTALLED_APPS = [
     'time_tracking',
     'teams',
     'corsheaders',
-    'depertment',
+    'department',
 ]
 
 MIDDLEWARE = [

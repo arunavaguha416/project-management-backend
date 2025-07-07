@@ -51,9 +51,6 @@ class User(AbstractBaseUser, PermissionsMixin, SoftDeletionModel):
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['name']
 
-    def __str__(self):
-        return self.email
-
     class Meta:
         verbose_name = _('User')
         verbose_name_plural = _('Users')

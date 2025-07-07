@@ -17,9 +17,6 @@ class Employee(SoftDeletionModel):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
-    def __str__(self):
-        return self.name
-
     class Meta:
         verbose_name = _('Employee')
         verbose_name_plural = _('Employeies')
@@ -45,9 +42,6 @@ class LeaveRequest(SoftDeletionModel):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
-
-    def __str__(self):
-        return self.name
 
     class Meta:
         verbose_name = _('LeaveRequest')
