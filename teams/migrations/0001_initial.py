@@ -9,22 +9,23 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
+        ('projects', '0001_initial'),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Department',
+            name='Team',
             fields=[
-                ('deleted_at', models.DateTimeField(blank=True, null=True)),
                 ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False, unique=True)),
-                ('name', models.CharField(max_length=100, unique=True)),
-                ('description', models.TextField(blank=True)),
+                ('name', models.CharField(max_length=100)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
+                ('deleted_at', models.DateTimeField(blank=True, null=True)),
+                ('project_id', models.ManyToManyField(related_name='teams', to='projects.project')),
             ],
             options={
-                'verbose_name': 'Department',
-                'verbose_name_plural': 'Departments',
+                'verbose_name': 'Team',
+                'verbose_name_plural': 'Teams',
             },
         ),
     ]
