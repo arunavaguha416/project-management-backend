@@ -7,4 +7,4 @@ from authentication.models.user import User
 class DepartmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Department
-        fields = ['id', 'name', 'description', 'manager', 'published_at', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'description', 'created_at', 'updated_at']

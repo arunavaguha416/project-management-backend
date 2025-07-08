@@ -4,6 +4,7 @@ from django.utils.translation import gettext_lazy as _
 from project_management.softDeleteModel import SoftDeletionModel
 import uuid
 from department.models.department_model import Department
+from company.models.company_model import Company
 
 class Employee(SoftDeletionModel):
     id = models.UUIDField(primary_key=True, 
@@ -11,7 +12,8 @@ class Employee(SoftDeletionModel):
                         editable=False, 
                         unique=True)
     user_id = models.OneToOneField(User, on_delete=models.CASCADE)
-    dept_id = models.ForeignKey(Department, on_delete=models.CASCADE, db_index=True)
+    comp_id = models.ForeignKey(Company, on_delete=models.CASCADE, db_index=True,null=True)
+    dept_id = models.ForeignKey(Department, on_delete=models.CASCADE, db_index=True,null=True)
     phone = models.CharField(max_length=15, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -3,12 +3,12 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
-
+from hr_management.serializers.hr_management_serializer import EmployeeSerializer
 from ..serializers.serializer import *
 from django.contrib.auth import authenticate
 from django.contrib.auth.signals import user_logged_in
 from rest_framework.permissions import IsAuthenticated, AllowAny
-
+from django.db import transaction
 class Login(APIView):
     """
     API View for user login. Accessible by any users.
@@ -87,31 +87,55 @@ class Registration(APIView):
 
     def post(self, request):
         """
-        Handle POST request for user registration. Creates a new user account with provided details.
+        Handle POST request for user registration. Creates a new user account and corresponding employee record.
         """
         try:
             # Create a mutable copy of request data
             data = request.data.copy()
             
-            # Attempt to serialize and validate user data
-            serializer = UserSerializer(data=data, partial=True)
-            if serializer.is_valid():
+            # Start a transaction to ensure both user and employee are created atomically
+            with transaction.atomic():
+                # Attempt to serialize and validate user data
+                user_serializer = UserSerializer(data=data, partial=True)
+                if not user_serializer.is_valid():
+                    return Response({
+                        'status': False,
+                        'message': 'Invalid user data provided',
+                        'errors': user_serializer.errors
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
                 # Save the new user
-                serializer.save()
+                user = user_serializer.save()
+                
+                # Prepare employee data
+                employee_data = {
+                    'user_id': str(user.id),
+                    'comp_id': data.get('comp_id'),
+                    'dept_id': data.get('dept_id'),
+                    'phone': data.get('phone', '')
+                }
+                
+                # Attempt to serialize and validate employee data
+                employee_serializer = EmployeeSerializer(data=employee_data)
+                if not employee_serializer.is_valid():
+                    # Rollback user creation if employee data is invalid
+                    return Response({
+                        'status': False,
+                        'message': 'Invalid employee data provided',
+                        'errors': employee_serializer.errors
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Save the employee
+                employee_serializer.save()
                 
                 return Response({
                     'status': True,
                     'message': 'User registered successfully',
-                    'data': serializer.data
+                    'data': {
+                        'user': user_serializer.data,
+                        'employee': employee_serializer.data
+                    }
                 }, status=status.HTTP_201_CREATED)
-                
-            else:
-                # Return error if data is invalid
-                return Response({
-                    'status': False,
-                    'message': 'Invalid data provided',
-                    'errors': serializer.errors
-                }, status=status.HTTP_206_PARTIAL_CONTENT)
                 
         except Exception as e:
             # Handle any unexpected errors

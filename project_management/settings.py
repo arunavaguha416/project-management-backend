@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'teams',
     'corsheaders',
     'department',
+    'company',
 ]
 
 MIDDLEWARE = [
