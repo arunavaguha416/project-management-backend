@@ -6,7 +6,7 @@ from django.db.models import Q
 from projects.models.task_model import Task
 from projects.serializers.task_serializer import TaskSerializer
 from django.core.paginator import Paginator
-import datetime
+from projects.models.sprint_model import Sprint
 
 
 class TaskAdd(APIView):
@@ -50,7 +50,7 @@ class SprintTaskList(APIView):
 
             if not sprint_id:
                 return Response({
-                    'status': False26,
+                    'status': False,
                     'message': 'Please provide sprintId'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
