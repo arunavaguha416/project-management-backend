@@ -11,9 +11,9 @@ class Employee(SoftDeletionModel):
                         default=uuid.uuid4, 
                         editable=False, 
                         unique=True)
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE)
-    comp_id = models.ForeignKey(Company, on_delete=models.CASCADE, db_index=True,null=True)
-    dept_id = models.ForeignKey(Department, on_delete=models.CASCADE, db_index=True,null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE,null=True)
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, db_index=True,null=True)
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, db_index=True,null=True)
     phone = models.CharField(max_length=15, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

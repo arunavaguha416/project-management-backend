@@ -11,8 +11,8 @@ class TeamMembersMapping(SoftDeletionModel):
                         default=uuid.uuid4, 
                         editable=False, 
                         unique=True)
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
-    team_id = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True)   
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True)   
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

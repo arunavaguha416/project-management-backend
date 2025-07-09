@@ -1,25 +1,25 @@
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from django.db.models import Q
-from projects.models.task_model import Task
-from projects.serializers.task_serializer import TaskSerializer
+from projects.models.sprint_model import Sprint
+from projects.models.project_model import Project
+from projects.serializers.sprint_serializer import SprintSerializer
 from django.core.paginator import Paginator
-import datetime
 
 
-class TaskAdd(APIView):
+class SprintAdd(APIView):
     permission_classes = (IsAdminUser,)
 
     def post(self, request):
         try:
-            serializer = TaskSerializer(data=request.data)
+            serializer = SprintSerializer(data=request.data)
             if serializer.is_valid():
                 serializer.save()
                 return Response({
                     'status': True,
-                    'message': 'Task added successfully',
+                    'message': 'Sprint added successfully',
                     'records': serializer.data
                 }, status=status.HTTP_200_OK)
             return Response({
@@ -30,12 +30,12 @@ class TaskAdd(APIView):
         except Exception as e:
             return Response({
                 'status': False,
-                'message': 'An error occurred while adding the task',
+                'message': 'An error occurred while adding the sprint',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
-class SprintTaskList(APIView):
+class SprintList(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
@@ -43,30 +43,22 @@ class SprintTaskList(APIView):
             search_data = request.data
             page = search_data.get('page')
             page_size = search_data.get('page_size', 10)
-            sprint_id = search_data.get('sprint_id')
-            search_title = search_data.get('title', '')
+            search_name = search_data.get('name', '')
             search_description = search_data.get('description', '')
-            company_id = search_data.get('company_id', '')
 
-            if not sprint_id:
-                return Response({
-                    'status': False26,
-                    'message': 'Please provide sprintId'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            query = Q(sprint__id=sprint_id, project__company__id=company_id) if company_id else Q(sprint__id=sprint_id)
-            if search_title:
-                query &= Q(title__icontains=search_title)
+            query = Q(projects__company__id=search_data.get('company_id', '')) if search_data.get('company_id') else Q()
+            if search_name:
+                query &= Q(name__icontains=search_name)
             if search_description:
                 query &= Q(description__icontains=search_description)
 
-            tasks = Task.objects.filter(query).order_by('-created_at')
+            sprints = Sprint.objects.filter(query).order_by('-created_at')
 
-            if tasks.exists():
+            if sprints.exists():
                 if page is not None:
-                    paginator = Paginator(tasks, page_size)
-                    paginated_tasks = paginator.get_page(page)
-                    serializer = TaskSerializer(paginated_tasks, many=True)
+                    paginator = Paginator(sprints, page_size)
+                    paginated_sprints = paginator.get_page(page)
+                    serializer = SprintSerializer(paginated_sprints, many=True)
                     return Response({
                         'status': True,
                         'count': paginator.count,
@@ -74,16 +66,16 @@ class SprintTaskList(APIView):
                         'records': serializer.data
                     }, status=status.HTTP_200_OK)
                 else:
-                    serializer = TaskSerializer(tasks, many=True)
+                    serializer = SprintSerializer(sprints, many=True)
                     return Response({
                         'status': True,
-                        'count': tasks.count(),
+                        'count': sprints.count(),
                         'records': serializer.data
                     }, status=status.HTTP_200_OK)
             else:
                 return Response({
                     'status': False,
-                    'message': 'Tasks not found',
+                    'message': 'Sprints not found',
                 }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({
@@ -92,53 +84,53 @@ class SprintTaskList(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
-class TaskDetails(APIView):
+class SprintDetails(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         try:
-            task_id = request.data.get('id')
-            if task_id:
-                task = Task.objects.filter(
-                    id=task_id, project__owner=request.user
-                ).values('id', 'title', 'description', 'status', 'priority', 'project__name', 'sprint__name', 'assigned_to__username').first()
-                if task:
+            sprint_id = request.data.get('id')
+            if sprint_id:
+                sprint = Sprint.objects.filter(id=sprint_id).values(
+                    'id', 'name', 'description', 'start_date', 'end_date', 'projects__id', 'projects__name'
+                ).first()
+                if sprint:
                     return Response({
                         'status': True,
-                        'records': task
+                        'records': sprint
                     }, status=status.HTTP_200_OK)
                 else:
                     return Response({
                         'status': False,
-                        'message': 'Task not found',
+                        'message': 'Sprint not found',
                     }, status=status.HTTP_200_OK)
             else:
                 return Response({
                     'status': False,
-                    'message': 'Please provide taskId'
+                    'message': 'Please provide sprintId'
                 }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({
                 'status': False,
-                'message': 'An error occurred while fetching task details',
+                'message': 'An error occurred while fetching sprint details',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
-class TaskUpdate(APIView):
+class SprintUpdate(APIView):
     permission_classes = (IsAdminUser,)
 
     def put(self, request):
         try:
-            task_id = request.data.get('id')
-            task = Task.objects.filter(id=task_id).first()
-            if task:
-                serializer = TaskSerializer(task, data=request.data, partial=True)
+            sprint_id = request.data.get('id')
+            sprint = Sprint.objects.filter(id=sprint_id).first()
+            if sprint:
+                serializer = SprintSerializer(sprint, data=request.data, partial=True)
                 if serializer.is_valid():
                     serializer.save()
                     return Response({
                         'status': True,
-                        'message': 'Task updated successfully'
+                        'message': 'Sprint updated successfully'
                     }, status=status.HTTP_200_OK)
                 return Response({
                     'status': False,
@@ -147,73 +139,33 @@ class TaskUpdate(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
             return Response({
                 'status': False,
-                'message': 'Task not found'
+                'message': 'Sprint not found'
             }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({
                 'status': False,
-                'message': 'An error occurred while updating the task',
+                'message': 'An error occurred while updating the sprint',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
-class TaskMove(APIView):
+class SprintDelete(APIView):
     permission_classes = (IsAdminUser,)
 
-    def put(self, request):
+    def delete(self, request, sprint_id):
         try:
-            task_id = request.data.get('id')
-            new_status = request.data.get('status')
-            sprint_id = request.data.get('sprint_id')
-            task = Task.objects.filter(id=task_id).first()
-            if not task:
-                return Response({
-                    'status': False,
-                    'message': 'Task not found'
-                }, status=status.HTTP_200_OK)
-            if new_status not in dict(Task.STATUS_CHOICES).keys():
-                return Response({
-                    'status': False,
-                    'message': 'Invalid status'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            if sprint_id and not Sprint.objects.filter(id=sprint_id).exists():
-                return Response({
-                    'status': False,
-                    'message': 'Sprint not found'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            task.status = new_status
-            if sprint_id:
-                task.sprint_id = sprint_id
-            task.save()
-            return Response({
-                'status': True,
-                'message': 'Task moved successfully'
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-
-class TaskDelete(APIView):
-    permission_classes = (IsAdminUser,)
-
-    def delete(self, request, task_id):
-        try:
-            task = Task.objects.filter(id=task_id).first()
-            if task:
-                task.soft_delete()
+            sprint = Sprint.objects.filter(id=sprint_id).first()
+            if sprint:
+                sprint.soft_delete()
                 return Response({
                     'status': True,
-                    'message': 'Task deleted successfully'
+                    'message': 'Sprint deleted successfully'
                 }, status=status.HTTP_200_OK)
             else:
                 return Response({
-                'status': False,
-                'message': 'Task not found'
-            }, status=status.HTTP_200_OK)
+                    'status': False,
+                    'message': 'Sprint not found'
+                }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({
                 'status': False,
@@ -221,25 +173,77 @@ class TaskDelete(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
-class RestoreTask(APIView):
+class RestoreSprint(APIView):
     permission_classes = (IsAdminUser,)
 
     def post(self, request):
         try:
-            task_id = request.data.get('id')
-            task = Task.all_objects.get(id=task_id)
-            if task:
-                task.deleted_at = None
-                task.save()
+            sprint_id = request.data.get('id')
+            sprint = Sprint.all_objects.get(id=sprint_id)
+            if sprint:
+                sprint.deleted_at = None
+                sprint.save()
                 return Response({
                     'status': True,
-                    'message': 'Task restored successfully'
+                    'message': 'Sprint restored successfully'
                 }, status=status.HTTP_200_OK)
             else:
                 return Response({
                     'status': False,
-                    'message': 'Task not found'
+                    'message': 'Sprint not found'
                 }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AddProjectToSprint(APIView):
+    permission_classes = (IsAdminUser,)
+
+    def post(self, request):
+        try:
+            sprint_id = request.data.get('sprint_id')
+            project_id = request.data.get('project_id')
+            sprint = Sprint.objects.filter(id=sprint_id).first()
+            project = Project.objects.filter(id=project_id).first()
+            if sprint and project:
+                sprint.projects.add(project)
+                return Response({
+                    'status': True,
+                    'message': 'Project added to sprint successfully'
+                }, status=status.HTTP_200_OK)
+            return Response({
+                'status': False,
+                'message': 'Sprint or project not found'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RemoveProjectFromSprint(APIView):
+    permission_classes = (IsAdminUser,)
+
+    def post(self, request):
+        try:
+            sprint_id = request.data.get('sprint_id')
+            project_id = request.data.get('project_id')
+            sprint = Sprint.objects.filter(id=sprint_id).first()
+            project = Project.objects.filter(id=project_id).first()
+            if sprint and project:
+                sprint.projects.remove(project)
+                return Response({
+                    'status': True,
+                    'message': 'Project removed from sprint successfully'
+                }, status=status.HTTP_200_OK)
+            return Response({
+                'status': False,
+                'message': 'Sprint or project not found'
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({
                 'status': False,

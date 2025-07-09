@@ -11,8 +11,8 @@ class DepartmentUSerMapping(SoftDeletionModel):
                         default=uuid.uuid4, 
                         editable=False, 
                         unique=True)
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
-    dept_id = models.ForeignKey(Department, on_delete=models.CASCADE, null=True, blank=True)   
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, null=True, blank=True)   
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

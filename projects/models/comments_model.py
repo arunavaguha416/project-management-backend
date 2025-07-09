@@ -8,12 +8,12 @@ import uuid
 
 class Comment(SoftDeletionModel):
     id = models.UUIDField(primary_key=True, 
-                        default=uuid.uuid4, 
-                        editable=False, 
-                        unique=True)
+                         default=uuid.uuid4, 
+                         editable=False, 
+                         unique=True)
     content = models.TextField()
-    comment_by = models.ForeignKey(User, on_delete=models.CASCADE)
-    task = models.ForeignKey(Task, on_delete=models.CASCADE, null=True, blank=True)
+    comment_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments')
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, null=True, blank=True, related_name='comments')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)

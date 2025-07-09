@@ -3,17 +3,20 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from django.db.models import Q
-from projects.models.project_model import Project
+from projects.models.project_model import Project, Company
 from projects.serializers.project_serializer import ProjectSerializer
 from django.core.paginator import Paginator
 import datetime
+
 
 class ProjectAdd(APIView):
     permission_classes = (IsAdminUser,)
 
     def post(self, request):
         try:
-            serializer = ProjectSerializer(data=request.data)
+            data = request.data.copy()
+            data['owner'] = request.user.id
+            serializer = ProjectSerializer(data=data)
             if serializer.is_valid():
                 serializer.save(owner=request.user)
                 return Response({
@@ -33,6 +36,7 @@ class ProjectAdd(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class ProjectList(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -43,12 +47,15 @@ class ProjectList(APIView):
             page_size = search_data.get('page_size', 10)
             search_name = search_data.get('name', '')
             search_description = search_data.get('description', '')
+            company_id = search_data.get('company_id', '')
 
-            query = Q(owner=request.user)
+            query = Q(owner=request.user) | Q(company__id=company_id)
             if search_name:
                 query &= Q(name__icontains=search_name)
             if search_description:
                 query &= Q(description__icontains=search_description)
+            if company_id:
+                query &= Q(company__id=company_id)
 
             projects = Project.objects.filter(query).order_by('-created_at')
 
@@ -81,12 +88,18 @@ class ProjectList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class PublishedProjectList(APIView):
     permission_classes = (AllowAny,)
 
     def get(self, request):
         try:
-            projects = Project.objects.filter(published_at__isnull=False).values('id', 'name').order_by('-created_at')
+            company_id = request.query_params.get('company_id', '')
+            query = Q(published_at__isnull=False)
+            if company_id:
+                query &= Q(company__id=company_id)
+
+            projects = Project.objects.filter(query).values('id', 'name', 'company__name', 'resource__username').order_by('-created_at')
             if projects.exists():
                 return Response({
                     'status': True,
@@ -103,6 +116,7 @@ class PublishedProjectList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class DeletedProjectList(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -113,12 +127,15 @@ class DeletedProjectList(APIView):
             page_size = search_data.get('page_size', 10)
             search_name = search_data.get('name', '')
             search_description = search_data.get('description', '')
+            company_id = search_data.get('company_id', '')
 
             query = Q(deleted_at__isnull=False)
             if search_name:
                 query &= Q(name__icontains=search_name)
             if search_description:
                 query &= Q(description__icontains=search_description)
+            if company_id:
+                query &= Q(company__id=company_id)
 
             projects = Project.all_objects.filter(query).order_by('-created_at')
 
@@ -151,6 +168,7 @@ class DeletedProjectList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class ProjectDetails(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -158,7 +176,9 @@ class ProjectDetails(APIView):
         try:
             project_id = request.data.get('id')
             if project_id:
-                project = Project.objects.filter(id=project_id, owner=request.user).values('id', 'name', 'description').first()
+                project = Project.objects.filter(id=project_id, owner=request.user).values(
+                    'id', 'name', 'description', 'company__name', 'resource__username'
+                ).first()
                 if project:
                     return Response({
                         'status': True,
@@ -180,6 +200,7 @@ class ProjectDetails(APIView):
                 'message': 'An error occurred while fetching project details',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
 
 class ProjectUpdate(APIView):
     permission_classes = (IsAdminUser,)
@@ -212,6 +233,7 @@ class ProjectUpdate(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class ChangeProjectPublishStatus(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -241,6 +263,7 @@ class ChangeProjectPublishStatus(APIView):
                 'message': str(e),
             }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class ProjectDelete(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -263,6 +286,7 @@ class ProjectDelete(APIView):
                 'status': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
 
 class RestoreProject(APIView):
     permission_classes = (IsAdminUser,)
