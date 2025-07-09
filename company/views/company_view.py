@@ -9,7 +9,7 @@ from company.models.company_model import Company
 from company.serializers.serializers import CompanySerializer
 
 class CompanyAdd(APIView):
-    permission_classes = (AllowAny,)
+    permission_classes = (IsAdminUser,)
 
     def post(self, request):
         try:
@@ -30,7 +30,7 @@ class CompanyAdd(APIView):
             return Response({'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class CompanyList(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (AllowAny,)
 
     def post(self, request):
         try:

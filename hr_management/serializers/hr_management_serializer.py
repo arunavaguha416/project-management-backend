@@ -15,9 +15,8 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
-        fields = [
-            'id', 'user', 'user_id', 'department', 'phone',
-            'created_at', 'updated_at', 'deleted_at', 'published_at'
+        fields = [ 
+            'id', 'user_id', 'comp_id', 'dept_id'
         ]
 
         

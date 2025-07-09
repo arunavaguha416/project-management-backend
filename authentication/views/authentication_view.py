@@ -112,7 +112,7 @@ class Registration(APIView):
                     'user_id': str(user.id),
                     'comp_id': data.get('comp_id'),
                     'dept_id': data.get('dept_id'),
-                    'phone': data.get('phone', '')
+                    # 'phone': data.get('phone', '')
                 }
                 
                 # Attempt to serialize and validate employee data

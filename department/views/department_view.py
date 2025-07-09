@@ -11,7 +11,7 @@ import datetime
 
 # API to add a new department (admin-only)
 class DepartmentAdd(APIView):
-    permission_classes = (AllowAny,)
+    permission_classes = (IsAdminUser,)
 
     def post(self, request):
         try:
@@ -37,7 +37,7 @@ class DepartmentAdd(APIView):
 
 # API to list departments with optional search and pagination (authenticated users)
 class DepartmentList(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (AllowAny,)
 
     def post(self, request):
         try:
