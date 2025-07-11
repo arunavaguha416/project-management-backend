@@ -35,14 +35,13 @@ class TaskAdd(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
+
 class SprintTaskList(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         try:
             search_data = request.data
-            page = search_data.get('page')
-            page_size = search_data.get('page_size', 10)
             sprint_id = search_data.get('sprint_id')
             search_title = search_data.get('title', '')
             search_description = search_data.get('description', '')
@@ -63,27 +62,59 @@ class SprintTaskList(APIView):
             tasks = Task.objects.filter(query).order_by('-created_at')
 
             if tasks.exists():
-                if page is not None:
-                    paginator = Paginator(tasks, page_size)
-                    paginated_tasks = paginator.get_page(page)
-                    serializer = TaskSerializer(paginated_tasks, many=True)
-                    return Response({
-                        'status': True,
-                        'count': paginator.count,
-                        'num_pages': paginator.num_pages,
-                        'records': serializer.data
-                    }, status=status.HTTP_200_OK)
-                else:
-                    serializer = TaskSerializer(tasks, many=True)
-                    return Response({
-                        'status': True,
-                        'count': tasks.count(),
-                        'records': serializer.data
-                    }, status=status.HTTP_200_OK)
+                serializer = TaskSerializer(tasks, many=True)
+                return Response({
+                    'status': True,
+                    'count': tasks.count(),
+                    'records': serializer.data
+                }, status=status.HTTP_200_OK)
             else:
                 return Response({
                     'status': False,
                     'message': 'Tasks not found',
+                }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class BacklogTaskList(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            search_data = request.data
+            project_id = search_data.get('project_id', '')
+            company_id = search_data.get('company_id', '')
+            search_title = search_data.get('title', '')
+            search_description = search_data.get('description', '')
+
+            query = Q(project__owner=request.user)
+            if project_id:
+                query &= Q(project__id=project_id)
+            if company_id:
+                query &= Q(project__company__id=company_id)
+            if search_title:
+                query &= Q(title__icontains=search_title)
+            if search_description:
+                query &= Q(description__icontains=search_description)
+            query &= Q(sprint__isnull=True)  # Tasks not assigned to any sprint (backlog)
+
+            tasks = Task.objects.filter(query).order_by('-created_at')
+
+            if tasks.exists():
+                serializer = TaskSerializer(tasks, many=True)
+                return Response({
+                    'status': True,
+                    'count': tasks.count(),
+                    'records': serializer.data
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'status': False,
+                    'message': 'Backlog tasks not found',
                 }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({

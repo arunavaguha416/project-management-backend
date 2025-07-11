@@ -11,8 +11,8 @@ class CompanyUserMapping(SoftDeletionModel):
                         default=uuid.uuid4, 
                         editable=False, 
                         unique=True)
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
-    company_id = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True)   
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True)   
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
