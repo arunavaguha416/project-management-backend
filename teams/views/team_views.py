@@ -87,28 +87,6 @@ class TeamList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-class PublishedTeamList(APIView):
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        try:
-            teams = Team.objects.filter(published_at__isnull=False).values('id', 'name').order_by('-created_at')
-            if teams.exists():
-                return Response({
-                    'status': True,
-                    'records': teams
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Teams not found',
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
 class DeletedTeamList(APIView):
     permission_classes = [IsAdminUser]
 
@@ -222,35 +200,6 @@ class TeamUpdate(APIView):
                 'status': False,
                 'message': 'An error occurred while updating the team',
                 'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class ChangeTeamPublishStatus(APIView):
-    permission_classes = [IsAdminUser]
-
-    def put(self, request):
-        try:
-            team_id = request.data.get('id')
-            publish = request.data.get('status')
-            if publish == 1:
-                data = {'published_at': datetime.datetime.now()}
-            elif publish == 0:
-                data = {'published_at': None}
-            team = Team.objects.get(id=team_id)
-            serializer = TeamSerializer(team, data=data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({
-                    'status': True,
-                    'message': 'Publish status updated successfully',
-                }, status=status.HTTP_200_OK)
-            return Response({
-                'status': False,
-                'message': 'Unable to update publish status',
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e),
             }, status=status.HTTP_400_BAD_REQUEST)
 
 class TeamDelete(APIView):
