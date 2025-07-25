@@ -79,28 +79,6 @@ class EmployeeList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-class PublishedEmployeeList(APIView):
-    permission_classes= (AllowAny,)
-
-    def get(self, request):
-        try:
-            employees = Employee.objects.filter(published_at__isnull=False).values('id', 'user.username').order_by('-created_at')
-            if employees.exists():
-                return Response({
-                    'status': True,
-                    'records': employees
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Employees not found',
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_REQUEST)
-
 class DeletedEmployeeList(APIView):
     permission_classes=(IsAdminUser,)
 
@@ -204,35 +182,6 @@ class EmployeeUpdate(APIView):
                 'status': False,
                 'message': 'An error occurred while updating the employee',
                 'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class ChangeEmployeePublishStatus(APIView):
-    permission_classes = [IsAdminUser,]
-
-    def put(self, request):
-        try:
-            employee_id = request.data.get('id')
-            publish = request.data.get('status')
-            if publish == 1:
-                data = {'published_at': datetime.datetime.now()}
-            elif publish == 0:
-                data = {'published_at': None}
-            employee = Employee.objects.get(id=employee_id)
-            serializer = EmployeeSerializer(employee, data=data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({
-                    'status': True,
-                    'message': 'Publish status updated successfully',
-                }, status=status.HTTP_200_OK)
-            return Response({
-                'status': False,
-                'message': 'Unable to update publish status',
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e),
             }, status=status.HTTP_400_BAD_REQUEST)
 
 class EmployeeDelete(APIView):
@@ -354,73 +303,6 @@ class LeaveRequestList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-class PublishedLeaveRequestList(APIView):
-    permission_classes = (AllowAny,)
-
-    def get(self, request):
-        try:
-            leave_requests = LeaveRequest.objects.filter(published_at__isnull=False).values('id', 'reason').order_by('-created_at')
-            if leave_requests.exists():
-                return Response({
-                    'status': True,
-                    'records': leave_requests
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Leave requests not found',
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class DeletedLeaveRequestList(APIView):
-    permission_classes = (IsAdminUser,)
-
-    def post(self, request):
-        try:
-            search_data = request.data
-            page = search_data.get('page')
-            page_size = search_data.get('page_size', 10)
-            search_reason = search_data.get('reason', '')
-
-            query = Q(deleted_at__isnull=False)
-            if search_reason:
-                query &= Q(reason__icontains=search_reason)
-
-            leave_requests = LeaveRequest.all_objects.filter(query).order_by('-created_at')
-
-            if leave_requests.exists():
-                if page is not None:
-                    paginator = Paginator(leave_requests, page_size)
-                    paginated_requests = paginator.get_page(page)
-                    serializer = LeaveRequestSerializer(paginated_requests, many=True)
-                    return Response({
-                        'status': True,
-                        'count': paginator.count,
-                        'num_pages': paginator.num_pages,
-                        'records': serializer.data
-                    }, status=status.HTTP_200_OK)
-                else:
-                    serializer = LeaveRequestSerializer(leave_requests, many=True)
-                    return Response({
-                        'status': True,
-                        'count': leave_requests.count(),
-                        'records': serializer.data
-                    }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Deleted leave requests not found',
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
 class LeaveRequestDetails(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -481,35 +363,6 @@ class LeaveRequestUpdate(APIView):
                 'status': False,
                 'message': 'An error occurred while updating the leave request',
                 'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class ChangeLeaveRequestPublishStatus(APIView):
-    permission_classes = (IsAdminUser,)
-
-    def put(self, request):
-        try:
-            leave_request_id = request.data.get('id')
-            publish = request.data.get('status')
-            if publish == 1:
-                data = {'published_at': datetime.datetime.now()}
-            elif publish == 0:
-                data = {'published_at': None}
-            leave_request = LeaveRequest.objects.get(id=leave_request_id)
-            serializer = LeaveRequestSerializer(leave_request, data=data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({
-                    'status': True,
-                    'message': 'Publish status updated successfully',
-                }, status=status.HTTP_200_OK)
-            return Response({
-                'status': False,
-                'message': 'Unable to update publish status',
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e),
             }, status=status.HTTP_400_BAD_REQUEST)
 
 class LeaveRequestDelete(APIView):

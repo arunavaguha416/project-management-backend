@@ -81,28 +81,6 @@ class NotificationList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-class PublishedNotificationList(APIView):
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        try:
-            notifications = Notification.objects.filter(published_at__isnull=False).values('id', 'message').order_by('-created_at')
-            if notifications.exists():
-                return Response({
-                    'status': True,
-                    'records': notifications
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Notifications not found',
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
 class DeletedNotificationList(APIView):
     permission_classes = [IsAdminUser]
 
@@ -209,83 +187,6 @@ class NotificationUpdate(APIView):
                 'status': False,
                 'message': 'An error occurred while updating the notification',
                 'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class ChangeNotificationPublishStatus(APIView):
-    permission_classes = [IsAdminUser]
-
-    def put(self, request):
-        try:
-            notification_id = request.data.get('id')
-            publish = request.data.get('status')
-            if publish == 1:
-                data = {'published_at': datetime.datetime.now()}
-            elif publish == 0:
-                data = {'published_at': None}
-            notification = Notification.objects.get(id=notification_id)
-            serializer = NotificationSerializer(notification, data=data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({
-                    'status': True,
-                    'message': 'Publish status updated successfully',
-                }, status=status.HTTP_200_OK)
-            return Response({
-                'status': False,
-                'message': 'Unable to update publish status',
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e),
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class NotificationDelete(APIView):
-    permission_classes = [IsAdminUser]
-
-    def delete(self, request, notification_id):
-        try:
-            notification = Notification.objects.filter(id=notification_id).first()
-            if notification:
-                notification.soft_delete()
-                return Response({
-                    'status': True,
-                    'message': 'Notification deleted successfully'
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Notification not found'
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class RestoreNotification(APIView):
-    permission_classes = [IsAdminUser]
-
-    def post(self, request):
-        try:
-            notification_id = request.data.get('id')
-            notification = Notification.all_objects.get(id=notification_id)
-            if notification:
-                notification.deleted_at = None
-                notification.save()
-                return Response({
-                    'status': True,
-                    'message': 'Notification restored successfully'
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Notification not found'
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
 class MarkNotificationRead(APIView):

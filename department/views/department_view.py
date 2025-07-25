@@ -73,29 +73,6 @@ class DepartmentList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-# API to list published departments (public access)
-class PublishedDepartmentList(APIView):
-    permission_classes = (AllowAny,)
-
-    def get(self, request):
-        try:
-            departments = Department.objects.filter(published_at__isnull=False).values('id', 'name').order_by('-created_at')
-            if departments.exists():
-                return Response({
-                    'status': True,
-                    'records': departments
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Departments not found',
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
 # API to list soft-deleted departments (admin-only)
 class DeletedDepartmentList(APIView):
     permission_classes = (IsAdminUser,)
@@ -214,53 +191,6 @@ class DepartmentUpdate(APIView):
                 'status': False,
                 'message': 'An error occurred while updating the department',
                 'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-# API to toggle department publish status (admin-only)
-class ChangeDepartmentPublishStatus(APIView):
-    permission_classes = (IsAdminUser,)
-
-    def put(self, request):
-        try:
-            department_id = request.data.get('id')
-            publish = request.data.get('status')
-            department = Department.objects.filter(id=department_id).first()
-            if department:
-                if not department.deleted_at:
-                    if publish == 1:
-                        data = {'published_at': datetime.datetime.now()}
-                    elif publish == 0:
-                        data = {'published_at': None}
-                    else:
-                        return Response({
-                            'status': False,
-                            'message': 'Invalid status value'
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                    serializer = DepartmentSerializer(department, data=data, partial=True)
-                    if serializer.is_valid():
-                        serializer.save()
-                        return Response({
-                            'status': True,
-                            'message': 'Publish status updated successfully'
-                        }, status=status.HTTP_200_OK)
-                    return Response({
-                        'status': False,
-                        'message': 'Unable to update publish status',
-                        'errors': serializer.errors
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                else:
-                    return Response({
-                        'status': False,
-                        'message': 'Cannot update publish status of a deleted department'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            return Response({
-                'status': False,
-                'message': 'Department not found'
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
 # API to soft delete a department (admin-only)

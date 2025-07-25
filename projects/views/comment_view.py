@@ -35,7 +35,6 @@ class CommentAdd(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class CommentList(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -90,7 +89,6 @@ class CommentList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class CommentDetails(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -123,7 +121,6 @@ class CommentDetails(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class CommentUpdate(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -155,7 +152,6 @@ class CommentUpdate(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class CommentDelete(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -178,7 +174,6 @@ class CommentDelete(APIView):
                 'status': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class RestoreComment(APIView):
     permission_classes = (IsAdminUser,)

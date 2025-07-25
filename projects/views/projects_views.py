@@ -8,7 +8,6 @@ from projects.serializers.project_serializer import ProjectSerializer
 from django.core.paginator import Paginator
 import datetime
 
-
 class ProjectAdd(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -35,7 +34,6 @@ class ProjectAdd(APIView):
                 'message': 'An error occurred while adding the project',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class ProjectList(APIView):
     permission_classes = (IsAuthenticated,)
@@ -88,35 +86,6 @@ class ProjectList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
-class PublishedProjectList(APIView):
-    permission_classes = (AllowAny,)
-
-    def get(self, request):
-        try:
-            company_id = request.query_params.get('company_id', '')
-            query = Q(published_at__isnull=False)
-            if company_id:
-                query &= Q(company__id=company_id)
-
-            projects = Project.objects.filter(query).values('id', 'name', 'company__name', 'resource__username').order_by('-created_at')
-            if projects.exists():
-                return Response({
-                    'status': True,
-                    'records': projects
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Projects not found',
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-
 class DeletedProjectList(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -168,7 +137,6 @@ class DeletedProjectList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class ProjectDetails(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -201,7 +169,6 @@ class ProjectDetails(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class ProjectUpdate(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -233,37 +200,6 @@ class ProjectUpdate(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
-class ChangeProjectPublishStatus(APIView):
-    permission_classes = (IsAdminUser,)
-
-    def put(self, request):
-        try:
-            project_id = request.data.get('id')
-            publish = request.data.get('status')
-            if publish == 1:
-                data = {'published_at': datetime.datetime.now()}
-            elif publish == 0:
-                data = {'published_at': None}
-            project = Project.objects.get(id=project_id)
-            serializer = ProjectSerializer(project, data=data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({
-                    'status': True,
-                    'message': 'Publish status updated successfully',
-                }, status=status.HTTP_200_OK)
-            return Response({
-                'status': False,
-                'message': 'Unable to update publish status',
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e),
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-
 class ProjectDelete(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -286,7 +222,6 @@ class ProjectDelete(APIView):
                 'status': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class RestoreProject(APIView):
     permission_classes = (IsAdminUser,)

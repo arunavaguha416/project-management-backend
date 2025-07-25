@@ -34,8 +34,6 @@ class TaskAdd(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
-
 class SprintTaskList(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -79,7 +77,6 @@ class SprintTaskList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class BacklogTaskList(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -122,7 +119,6 @@ class BacklogTaskList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class TaskDetails(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -155,7 +151,6 @@ class TaskDetails(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class TaskUpdate(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -186,7 +181,6 @@ class TaskUpdate(APIView):
                 'message': 'An error occurred while updating the task',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class TaskMove(APIView):
     permission_classes = (IsAdminUser,)
@@ -227,7 +221,6 @@ class TaskMove(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class TaskDelete(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -250,7 +243,6 @@ class TaskDelete(APIView):
                 'status': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class RestoreTask(APIView):
     permission_classes = (IsAdminUser,)

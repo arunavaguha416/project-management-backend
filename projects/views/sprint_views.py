@@ -8,7 +8,6 @@ from projects.models.project_model import Project
 from projects.serializers.sprint_serializer import SprintSerializer
 from django.core.paginator import Paginator
 
-
 class SprintAdd(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -33,7 +32,6 @@ class SprintAdd(APIView):
                 'message': 'An error occurred while adding the sprint',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class SprintList(APIView):
     permission_classes = (IsAuthenticated,)
@@ -83,7 +81,6 @@ class SprintList(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class SprintDetails(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -116,7 +113,6 @@ class SprintDetails(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class SprintUpdate(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -148,7 +144,6 @@ class SprintUpdate(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class SprintDelete(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -171,7 +166,6 @@ class SprintDelete(APIView):
                 'status': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class RestoreSprint(APIView):
     permission_classes = (IsAdminUser,)
@@ -198,7 +192,6 @@ class RestoreSprint(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class AddProjectToSprint(APIView):
     permission_classes = (IsAdminUser,)
 
@@ -223,7 +216,6 @@ class AddProjectToSprint(APIView):
                 'status': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class RemoveProjectFromSprint(APIView):
     permission_classes = (IsAdminUser,)
