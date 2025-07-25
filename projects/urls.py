@@ -6,13 +6,11 @@ from .views.sprint_views import *
 
 
 urlpatterns = [
-     path('project/add/', ProjectAdd.as_view(), name='project_add'),
+    path('project/add/', ProjectAdd.as_view(), name='project_add'),
     path('project/list/', ProjectList.as_view(), name='project_list'),
-    path('project/published/', PublishedProjectList.as_view(), name='published_project_list'),
     path('project/deleted/', DeletedProjectList.as_view(), name='deleted_project_list'),
     path('project/details/', ProjectDetails.as_view(), name='project_details'),
     path('project/update/', ProjectUpdate.as_view(), name='project_update'),
-    path('project/publish/', ChangeProjectPublishStatus.as_view(), name='project_publish'),
     path('project/delete/<uuid:project_id>/', ProjectDelete.as_view(), name='project_delete'),
     path('project/restore/', RestoreProject.as_view(), name='project_restore'),
 

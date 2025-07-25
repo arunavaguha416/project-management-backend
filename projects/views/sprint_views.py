@@ -5,8 +5,11 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from django.db.models import Q
 from projects.models.sprint_model import Sprint
 from projects.models.project_model import Project
+from projects.models.task_model import Task
+from projects.models.comments_model import Comment
 from projects.serializers.sprint_serializer import SprintSerializer
 from django.core.paginator import Paginator
+from django.db.models import Count
 
 class SprintAdd(APIView):
     permission_classes = (IsAdminUser,)
@@ -240,4 +243,62 @@ class RemoveProjectFromSprint(APIView):
             return Response({
                 'status': False,
                 'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+class SprintSummary(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            sprint_id = request.data.get('id')
+            if not sprint_id:
+                return Response({
+                    'status': False,
+                    'message': 'Please provide sprintId'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Fetch sprint with related projects
+            sprint = Sprint.objects.filter(id=sprint_id).first()
+            if not sprint:
+                return Response({
+                    'status': False,
+                    'message': 'Sprint not found'
+                }, status=status.HTTP_200_OK)
+
+            # Serialize sprint details
+            sprint_serializer = SprintSerializer(sprint)
+
+            # Aggregate task counts by status
+            task_counts = Task.objects.filter(sprint__id=sprint_id).aggregate(
+                total_tasks=Count('id'),
+                todo_tasks=Count('id', filter=Q(status='TODO')),
+                in_progress_tasks=Count('id', filter=Q(status='IN_PROGRESS')),
+                done_tasks=Count('id', filter=Q(status='DONE'))
+            )
+
+            # Optional: Count comments for tasks in this sprint
+            comment_count = Comment.objects.filter(task__sprint__id=sprint_id).count()
+
+            # Build summary response
+            summary = {
+                'sprint': sprint_serializer.data,
+                'task_summary': {
+                    'total_tasks': task_counts['total_tasks'],
+                    'todo_tasks': task_counts['todo_tasks'],
+                    'in_progress_tasks': task_counts['in_progress_tasks'],
+                    'done_tasks': task_counts['done_tasks']
+                },
+                'comment_count': comment_count
+            }
+
+            return Response({
+                'status': True,
+                'records': summary
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'An error occurred while fetching sprint summary',
+                'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
