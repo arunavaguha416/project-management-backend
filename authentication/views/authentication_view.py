@@ -21,7 +21,7 @@ class Login(APIView):
         Authenticates users and returns appropriate tokens based on user type (admin/non-admin).
         """
         try:
-            username = request.data.get('username')
+            username = request.data.get('email')
             password = request.data.get('password')
             isAdmin = request.data.get('is_admin', False)
             
@@ -110,8 +110,8 @@ class Registration(APIView):
                 # Prepare employee data
                 employee_data = {
                     'user_id': str(user.id),
-                    'comp_id': data.get('comp_id'),
-                    'dept_id': data.get('dept_id'),
+                    'company_id': data.get('comp_id'),
+                    'department_id': data.get('dept_id'),
                     # 'phone': data.get('phone', '')
                 }
                 

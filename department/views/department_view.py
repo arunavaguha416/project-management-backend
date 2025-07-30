@@ -40,19 +40,8 @@ class DepartmentList(APIView):
     permission_classes = (AllowAny,)
 
     def post(self, request):
-        try:
-            # search_data = request.data
-            # page = search_data.get('page')
-            # page_size = search_data.get('page_size', 10)
-            # search_name = search_data.get('name', '')
-            # search_description = search_data.get('description', '')
-
-            query = Q()
-            # if search_name:
-            #     query &= Q(name__icontains=search_name)
-            # if search_description:
-            #     query &= Q(description__icontains=search_description)
-
+        try: 
+            query = Q()  
             departments = Department.objects.filter(query).order_by('-created_at')
 
             if departments.exists():                    

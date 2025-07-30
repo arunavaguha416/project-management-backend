@@ -38,6 +38,7 @@ class User(AbstractBaseUser, PermissionsMixin, SoftDeletionModel):
                         editable=False, 
                         unique=True)
     name = models.CharField(max_length=100)
+    username = models.CharField(max_length=30, unique=True, null=True,)
     email = models.EmailField(unique=True)
     avatar = models.URLField(blank=True, null=True)
     salary = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
@@ -48,8 +49,8 @@ class User(AbstractBaseUser, PermissionsMixin, SoftDeletionModel):
     role = models.CharField(max_length=10, choices=userRole.choices, null=True, blank=True, db_index=True)
     objects = UserManager()
 
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['name']
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = []
 
     class Meta:
         verbose_name = _('User')

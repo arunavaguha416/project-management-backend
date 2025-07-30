@@ -16,7 +16,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = [ 
-            'id', 'user_id', 'comp_id', 'dept_id'
+            'id', 'user_id', 'company_id', 'department_id'
         ]
 
         
