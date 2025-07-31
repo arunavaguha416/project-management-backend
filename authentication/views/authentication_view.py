@@ -21,7 +21,7 @@ class Login(APIView):
         Authenticates users and returns appropriate tokens based on user type (admin/non-admin).
         """
         try:
-            username = request.data.get('email')
+            username = request.data.get('username')
             password = request.data.get('password')
             isAdmin = request.data.get('is_admin', False)
             
