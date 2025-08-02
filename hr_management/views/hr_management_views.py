@@ -7,6 +7,9 @@ from hr_management.models.hr_management_models import Employee, LeaveRequest
 from hr_management.serializers.hr_management_serializer import EmployeeSerializer, LeaveRequestSerializer
 from django.core.paginator import Paginator
 import datetime
+from django.utils import timezone
+from projects.models.project_model import Project
+from authentication.models.user import User
 
 # Employee Views
 class EmployeeAdd(APIView):
@@ -412,3 +415,76 @@ class RestoreLeaveRequest(APIView):
                 'status': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
+class HRDashboardView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        try:
+            # Employee summary
+            total_employees = Employee.objects.filter(deleted_at__isnull=True).count()
+            recent_employees = Employee.objects.filter(deleted_at__isnull=True).order_by('-created_at')[:5]
+            recent_employees_data = []
+            for emp in recent_employees:
+                user = emp.user
+                recent_employees_data.append({
+                    'id': emp.id,
+                    'name': user.name if user else None,
+                    'designation': user.role if user else None,
+                    'salary': user.salary if user else None,
+                })
+            
+            # Project summary
+            total_projects = Project.objects.filter(deleted_at__isnull=True).count()
+            project_status_counts = {
+                'Ongoing': Project.objects.filter(deleted_at__isnull=True, ).count(), # update if you have a status field
+                'Done': 0  # update if you have a status field
+            }
+            # (If your model has status field, count based on it; else omit)
+            
+            # Attendance (Dummy: you’d query a real attendance model. Otherwise, estimate)
+            # Let’s say an employee with a leave today = 'absent'
+            today = timezone.now().date()
+            leaves_today = LeaveRequest.objects.filter(
+                start_date__lte=today, 
+                end_date__gte=today, 
+                status='APPROVED'
+            ).values_list('employee_id', flat=True)
+            present_count = total_employees - leaves_today.count()
+            absent_count = leaves_today.count()
+            attendance = {
+                'present': present_count,
+                'absent': absent_count,
+                'present_percent': round((present_count/total_employees)*100 if total_employees > 0 else 0),
+                'absent_percent': round((absent_count/total_employees)*100 if total_employees > 0 else 0)
+            }
+            
+            # Upcoming birthdays (next 30 days)
+            today = timezone.now().date()
+            next_month = today + timezone.timedelta(days=30)
+            employees_with_birthdays = User.objects.filter(
+                is_active=True,
+                date_of_birth__month__gte=today.month,
+                date_of_birth__day__gte=today.day
+            ).order_by('date_of_birth')
+            birthday_list = []
+            for u in employees_with_birthdays:
+                birthday_list.append({'name': u.name, 'email': u.email, 'date': u.date_of_birth})
+
+            return Response({
+                'status': True,
+                'data': {
+                    'employee_summary': {
+                        'total': total_employees,
+                        'records': recent_employees_data,
+                    },
+                    'project_summary': {
+                        'total': total_projects,
+                        'records': project_status_counts,
+                    },
+                    'attendance': attendance,
+                    'birthdays': birthday_list
+                }
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'status': False, 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

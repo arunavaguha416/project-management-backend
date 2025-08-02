@@ -15,4 +15,5 @@ urlpatterns = [
     path('leave-requests/update/', LeaveRequestUpdate.as_view(), name='leave-request-update'),
     path('leave-requests/delete/<uuid:leave_request_id>/', LeaveRequestDelete.as_view(), name='leave-request-delete'),
     path('leave-requests/restore/', RestoreLeaveRequest.as_view(), name='leave-request-restore'),
+    path('hr-dashboard/', HRDashboardView.as_view(), name='hr-dashboard'),
 ]

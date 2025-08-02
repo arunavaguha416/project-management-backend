@@ -9,6 +9,12 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.signals import user_logged_in
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.db import transaction
+from projects.models.project_model import Project
+from projects.models.task_model import Task
+from teams.models.team_model import Team
+from django.db.models import Count, Q
+from teams.models.team_members_mapping import TeamMembersMapping
+
 class Login(APIView):
     """
     API View for user login. Accessible by any users.
@@ -31,14 +37,20 @@ class Login(APIView):
             if user is not None:
                 # Generate token for authenticated user
                 token = RefreshToken.for_user(user)
+                # Prepare user data for response
+                user_data = {
+                    'email': user.email,
+                    'name': user.name,
+                    'role': user.role,
+                    'is_admin': user.is_superuser
+                }
                 
                 # Handle different login scenarios based on user type and requested login type
                 if isAdmin is True and user.is_superuser is True:
                     return Response({
                         'status': True,
                         'message': 'Admin login successful',
-                        'username': username,
-                        'is_admin': user.is_superuser,
+                        'user': user_data,
                         'refresh': str(token),
                         'access': str(token.access_token),
                     }, status=status.HTTP_200_OK)
@@ -53,7 +65,7 @@ class Login(APIView):
                     return Response({
                         'status': True,
                         'message': 'User login successful',
-                        'username': username,
+                        'user': user_data,
                         'is_admin': user.is_superuser,
                         'refresh': str(token),
                         'access': str(token.access_token),
@@ -255,3 +267,63 @@ class UserProfileView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        role = user.role
+        data = {}
+
+        if role == User.userRole.ADMIN:
+            data = self.get_admin_dashboard_data(user)
+        elif role == User.userRole.MANAGER:
+            data = self.get_manager_dashboard_data(user)
+        elif role == User.userRole.HR:
+            data = self.get_hr_dashboard_data(user)
+        else:  # USER
+            data = self.get_user_dashboard_data(user)
+
+        return Response({
+            'status': True,
+            'role': role,
+            'data': data
+        }, status=status.HTTP200_OK)
+
+    def get_admin_dashboard_data(self, user):
+        teams = Team.objects.filter(deleted_at__isnull=True).annotate(member_count=Count('members'))
+        projects = Project.objects.filter(deleted_at__isnull=True).count()
+        tasks = Task.objects.filter(deleted_at__isnull=True).count()
+        return {
+            'teams': [{'id': team.id, 'name': team.name, 'member_count': team.member_count} for team in teams],
+            'total_projects': projects,
+            'total_tasks': tasks
+        }
+
+    def get_manager_dashboard_data(self, user):
+        teams = Team.objects.filter(members=user, deleted_at__isnull=True).annotate(
+            task_count=Count('projects__tasks', filter=Q(projects__tasks__deleted_at__isnull=True))
+        )
+        return {
+            'teams': [{'id': team.id, 'name': team.name, 'task_count': team.task_count} for team in teams]
+        }
+
+    def get_hr_dashboard_data(self, user):
+        teams = Team.objects.filter(deleted_at__isnull=True).annotate(member_count=Count('members'))
+        total_members = TeamMembersMapping.objects.filter(deleted_at__isnull=True).count()
+        return {
+            'teams': [{'id': team.id, 'name': team.name, 'member_count': team.member_count} for team in teams],
+            'total_members': total_members
+        }
+
+    def get_user_dashboard_data(self, user):
+        teams = Team.objects.filter(members=user, deleted_at__isnull=True).annotate(
+            task_count=Count('projects__tasks', filter=Q(projects__tasks__deleted_at__isnull=True))
+        )
+        tasks_assigned = Task.objects.filter(assigned_to=user, deleted_at__isnull=True).count()
+        return {
+            'teams': [{'id': team.id, 'name': team.name, 'task_count': team.task_count} for team in teams],
+            'tasks_assigned': tasks_assigned
+        }
