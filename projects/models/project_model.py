@@ -6,6 +6,11 @@ import uuid
 from company.models.company_model import Company
 
 class Project(SoftDeletionModel):
+    class projectStatus(models.TextChoices):
+        Ongoing='Ongoing'
+        Completed='Completed'
+        
+
     id = models.UUIDField(primary_key=True, 
                          default=uuid.uuid4, 
                          editable=False, 
@@ -14,7 +19,9 @@ class Project(SoftDeletionModel):
     description = models.TextField(blank=True)
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='projects',null=True)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='owned_projects',null=True)
+    manager = models.ForeignKey(User, on_delete=models.CASCADE, related_name='manager',null=True)
     resource = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='brought_projects')
+    status = models.CharField(max_length=10, choices=projectStatus.choices, default=projectStatus.Ongoing, null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

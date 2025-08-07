@@ -6,13 +6,15 @@ from .views.sprint_views import *
 
 
 urlpatterns = [
-    path('project/add/', ProjectAdd.as_view(), name='project_add'),
-    path('project/list/', ProjectList.as_view(), name='project_list'),
-    path('project/deleted/', DeletedProjectList.as_view(), name='deleted_project_list'),
-    path('project/details/', ProjectDetails.as_view(), name='project_details'),
-    path('project/update/', ProjectUpdate.as_view(), name='project_update'),
-    path('project/delete/<uuid:project_id>/', ProjectDelete.as_view(), name='project_delete'),
-    path('project/restore/', RestoreProject.as_view(), name='project_restore'),
+    path('add/', ProjectAdd.as_view(), name='project_add'),
+    path('list/', ProjectList.as_view(), name='project_list'),
+    path('deleted/', DeletedProjectList.as_view(), name='deleted_project_list'),
+    path('details/', ProjectDetails.as_view(), name='project_details'),
+    path('update/', ProjectUpdate.as_view(), name='project_update'),
+    path('summary/', ProjectSummary.as_view(), name='project_update'),
+    path('delete/<uuid:project_id>/', ProjectDelete.as_view(), name='project_delete'),
+    path('restore/', RestoreProject.as_view(), name='project_restore'),
+    path('details/<uuid:id>/', ProjectDetails.as_view(), name='project-details'),
 
     path('sprint/add/', SprintAdd.as_view(), name='sprint_add'),
     path('sprint/list/', SprintList.as_view(), name='sprint_list'),

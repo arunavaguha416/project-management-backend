@@ -39,13 +39,11 @@ class User(AbstractBaseUser, PermissionsMixin, SoftDeletionModel):
                         default=uuid.uuid4, 
                         editable=False, 
                         unique=True)
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, null=True)
     username = models.CharField(max_length=30, unique=True, null=True)
     email = models.EmailField(unique=True)
-    date_of_birth = models.DateField(null=True, blank=True)
-    date_of_joining = models.DateField(null=True, blank=True)
-    avatar = models.URLField(blank=True, null=True)
-    salary = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    date_of_birth = models.DateField(null=True, blank=True)    
+    avatar = models.URLField(blank=True, null=True)    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)

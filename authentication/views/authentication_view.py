@@ -12,6 +12,8 @@ from django.db import transaction
 from projects.models.project_model import Project
 from projects.models.task_model import Task
 from teams.models.team_model import Team
+from hr_management.models.hr_management_models import Employee, LeaveRequest, Attendance
+
 from django.db.models import Count, Q
 from teams.models.team_members_mapping import TeamMembersMapping
 
@@ -51,6 +53,7 @@ class Login(APIView):
                         'status': True,
                         'message': 'Admin login successful',
                         'user': user_data,
+                        'role': user.role,
                         'refresh': str(token),
                         'access': str(token.access_token),
                     }, status=status.HTTP_200_OK)
@@ -80,7 +83,10 @@ class Login(APIView):
                 # Authentication failed
                 return Response({
                     'status': False,
-                    'message': 'Invalid credentials'
+                    'message': 'Invalid credentials',
+                    'username': username,
+                    'password':password,
+                    'user':user,
                 }, status=status.HTTP_203_NON_AUTHORITATIVE_INFORMATION)
                 
         except Exception as e:
@@ -95,19 +101,13 @@ class Registration(APIView):
     """
     API View for user registration. Accessible by any users.
     """
-    permission_classes = (AllowAny,)
+    permission_classes = ()
 
     def post(self, request):
-        """
-        Handle POST request for user registration. Creates a new user account and corresponding employee record.
-        """
         try:
-            # Create a mutable copy of request data
             data = request.data.copy()
-            
-            # Start a transaction to ensure both user and employee are created atomically
             with transaction.atomic():
-                # Attempt to serialize and validate user data
+                # Serialize and validate User
                 user_serializer = UserSerializer(data=data, partial=True)
                 if not user_serializer.is_valid():
                     return Response({
@@ -115,42 +115,33 @@ class Registration(APIView):
                         'message': 'Invalid user data provided',
                         'errors': user_serializer.errors
                     }, status=status.HTTP_400_BAD_REQUEST)
-                
-                # Save the new user
+
+                # Save User (this also handles password hashing)
                 user = user_serializer.save()
-                
-                # Prepare employee data
-                employee_data = {
-                    'user_id': str(user.id),
-                    'company_id': data.get('comp_id'),
-                    'department_id': data.get('dept_id'),
-                    # 'phone': data.get('phone', '')
-                }
-                
-                # Attempt to serialize and validate employee data
-                employee_serializer = EmployeeSerializer(data=employee_data)
-                if not employee_serializer.is_valid():
-                    # Rollback user creation if employee data is invalid
-                    return Response({
-                        'status': False,
-                        'message': 'Invalid employee data provided',
-                        'errors': employee_serializer.errors
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                # Save the employee
-                employee_serializer.save()
-                
+
+                # Create Employee DIRECTLY, so FK is always present
+                employee = Employee.objects.create(
+                    user=user,
+                    salary=data.get('salary'),
+                    date_of_joining=data.get('date_of_joining'),
+                    designation=data.get('designation'),
+                    company_id=data.get('comp_id'),
+                    department_id=data.get('dept_id'),
+                    # phone=data.get('phone', '')  # Uncomment if you want phone support
+                )
+
+                # Use serializer for Employee representation in response
+                employee_data = EmployeeSerializer(employee).data
+
                 return Response({
                     'status': True,
                     'message': 'User registered successfully',
                     'data': {
                         'user': user_serializer.data,
-                        'employee': employee_serializer.data
+                        'employee': employee_data
                     }
                 }, status=status.HTTP_201_CREATED)
-                
         except Exception as e:
-            # Handle any unexpected errors
             return Response({
                 'status': False,
                 'message': 'An error occurred during registration',
@@ -256,7 +247,7 @@ class ChangePassword(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
         
-class UserProfileView(APIView):
+class UserProfile(APIView):
     def get(self, request):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
@@ -327,3 +318,67 @@ class DashboardView(APIView):
             'teams': [{'id': team.id, 'name': team.name, 'task_count': team.task_count} for team in teams],
             'tasks_assigned': tasks_assigned
         }
+    
+
+class UserList(APIView):
+    permission_classes = (IsAuthenticated,)  # Or IsAdminUser if only admins can fetch users
+
+    def post(self, request):
+        role = request.query_params.get('role', None)
+        users = User.objects.all()
+        if role:
+            users = users.filter(role=role)
+        serializer = UserSerializer(users, many=True)
+        return Response({
+            'status': True,
+            'count': users.count(),
+            'records': serializer.data
+        })
+
+    # Optional: if you want to support POST as well
+    def post(self, request):
+        role = request.data.get('role', None)
+        users = User.objects.all()
+        if role:
+            users = users.filter(role=role)
+        serializer = UserSerializer(users, many=True)
+        return Response({
+            'status': True,
+            'count': users.count(),
+            'records': serializer.data
+        })
+    
+class UserDetails(APIView):
+    def get(self, request, id):
+        try:
+            employee = Employee.objects.select_related('user').filter(id=id).first()
+            if not employee:
+                return Response({'status': False, 'message': 'Not found'}, status=404)
+            user = employee.user
+            data = {
+                'id': str(employee.id),
+                'name': user.name,
+                'designation': employee.designation,
+                'salary': employee.salary,
+                'date_of_joining': employee.date_of_joining,
+                'date_of_birth': user.date_of_birth,
+                'manager_name': None,  # adjust as needed
+            }
+
+            # Attendance records (Example: use your model fields)
+            attendance = Attendance.objects.filter(employee=employee).order_by('-date')[:10]
+            attendance_data = [{'date': a.date, 'in_time': a.in_time, 'out_time': a.out_time} for a in attendance]
+
+            # Leave Requests
+            leaves = LeaveRequest.objects.filter(employee=employee).order_by('-start_date')[:5]
+            leave_data = [{'date': l.start_date, 'reason': l.reason, 'status': l.status} for l in leaves]
+
+            return Response({
+                'status': True,
+                'records': data,
+                'attendance': attendance_data,
+                'leaves': leave_data,
+            })
+
+        except Exception as e:
+            return Response({'status': False, 'error': str(e)}, status=400)
