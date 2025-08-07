@@ -15,3 +15,18 @@ class Company(SoftDeletionModel):
     class Meta:
         verbose_name = "Company"
         verbose_name_plural = "Companies"
+
+class UserMapping(SoftDeletionModel):
+    id = models.UUIDField(primary_key=True, 
+                        default=uuid.uuid4, 
+                        editable=False, 
+                        unique=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True)   
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+    class Meta:
+        verbose_name = "UserMapping"
+        verbose_name_plural = "UserMappings"

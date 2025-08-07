@@ -29,5 +29,21 @@ class Project(SoftDeletionModel):
         verbose_name = _('Project')
         verbose_name_plural = _('Projects')
 
+class UserMapping(SoftDeletionModel):
+    id = models.UUIDField(primary_key=True, 
+                        default=uuid.uuid4, 
+                        editable=False, 
+                        unique=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='assigned_to')
+    manager = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='project_manager')
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True, blank=True)   
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+    class Meta:
+        verbose_name = "UserMapping"
+        verbose_name_plural = "UserMappings"
+
 
 
