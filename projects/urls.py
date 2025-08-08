@@ -15,6 +15,11 @@ urlpatterns = [
     path('delete/<uuid:project_id>/', ProjectDelete.as_view(), name='project_delete'),
     path('restore/', RestoreProject.as_view(), name='project_restore'),
     path('details/<uuid:id>/', ProjectDetails.as_view(), name='project-details'),
+    path('manager/projects/list', ManagerProjects.as_view(), name='manager-project-list'),
+    path('assign-manager/', AssignProjectManager.as_view(), name='assign_project_manager'),
+    path('employees/project/list/', EmployeeProjectList.as_view(), name='employees-project-list'),
+    path('tasks/list/', ProjectTasksList.as_view(), name='project-tasks-list'),
+    path('milestones/list/', ProjectMilestonesList.as_view(), name='project-milestones-list'),
 
     path('sprint/add/', SprintAdd.as_view(), name='sprint_add'),
     path('sprint/list/', SprintList.as_view(), name='sprint_list'),

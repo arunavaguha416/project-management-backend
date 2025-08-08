@@ -6,7 +6,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     manager = UserSerializer(read_only=True)
     class Meta(object):
         model = Project
-        fields = ['id', 'name', 'company','manager_id','manager','status']
+        fields = ['id', 'name', 'manager_id','manager','status']
         
 
         

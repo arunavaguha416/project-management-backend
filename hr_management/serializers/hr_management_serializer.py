@@ -30,4 +30,16 @@ class AttendanceSerializer(serializers.ModelSerializer):
         model = Attendance
         fields = ['date', 'in_time', 'out_time']
 
+
+from rest_framework import serializers
+from hr_management.models.hr_management_models import Employee
+
+class ManagerListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ['id', 'user_id', 'company_id', 'department_id', 'salary', 'date_of_joining', 'designation']
+
+
+
+
         
