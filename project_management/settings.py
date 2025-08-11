@@ -51,7 +51,19 @@ INSTALLED_APPS = [
     'corsheaders',
     'department',
     'company',
+    'channels',
 ]
+
+ASGI_APPLICATION = 'project_management_system.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
+}
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
