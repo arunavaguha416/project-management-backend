@@ -20,6 +20,8 @@ urlpatterns = [
     path('employees/project/list/', EmployeeProjectList.as_view(), name='employees-project-list'),
     path('tasks/list/', ProjectTasksList.as_view(), name='project-tasks-list'),
     path('milestones/list/', ProjectMilestonesList.as_view(), name='project-milestones-list'),
+    path('manager/list/', ManagerProjectList.as_view(), name='manager-project-list'),
+    
 
     path('sprint/add/', SprintAdd.as_view(), name='sprint_add'),
     path('sprint/list/', SprintList.as_view(), name='sprint_list'),

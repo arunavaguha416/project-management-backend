@@ -855,3 +855,91 @@ class ProjectMilestonesList(APIView):
                 'message': 'An error occurred while fetching project milestones',
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+class ManagerProjectList(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            # 1. Get the logged-in user
+            logged_in_user = request.user
+
+            # 2. Check role
+            if logged_in_user.role != "MANAGER":
+                return Response({
+                    'status': False,
+                    'message': 'You are not authorized to view manager projects'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # 3. Get Employee profile for this manager
+            try:
+                manager_employee = Employee.objects.select_related("user").get(user=logged_in_user)
+            except Employee.DoesNotExist:
+                return Response({
+                    'status': False,
+                    'message': 'Employee profile for this manager not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # 4. Pagination & search
+            search_data = request.data
+            page = int(search_data.get('page', 1))
+            page_size = int(search_data.get('page_size', 10))
+            search_project = search_data.get('search', '').strip()
+
+            # Base queryset: only this manager's projects
+            projects_queryset = Project.objects.select_related('manager__user').filter(manager=manager_employee)
+
+            # Search filter
+            if search_project:
+                projects_queryset = projects_queryset.filter(
+                    Q(name__icontains=search_project) |
+                    Q(description__icontains=search_project) |
+                    Q(manager__user__name__icontains=search_project) |
+                    Q(manager__user__email__icontains=search_project)
+                )
+
+            projects_queryset = projects_queryset.order_by('-created_at')
+
+            # 5. Pagination
+            paginator = Paginator(projects_queryset, page_size)
+            try:
+                paginated_projects = paginator.page(page)
+            except Exception:
+                paginated_projects = paginator.page(1)
+
+            # 6. Prepare response data
+            project_data = []
+            for project in paginated_projects:
+                project_data.append({
+                    'id': str(project.id),
+                    'name': project.name,
+                    'description': project.description,
+                    'status': project.status,
+                    'manager': {
+                        'id': str(project.manager.id),
+                        'user_id': str(project.manager.user.id),
+                        'name': project.manager.user.name,
+                        'email': project.manager.user.email,
+                        'username': project.manager.user.username
+                    },
+                    'created_at': project.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'updated_at': project.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+                })
+
+            return Response({
+                'status': True,
+                'count': paginator.count,
+                'num_pages': paginator.num_pages,
+                'current_page': page,
+                'records': project_data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
