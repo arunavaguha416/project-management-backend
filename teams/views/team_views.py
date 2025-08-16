@@ -456,3 +456,173 @@ class ProjectTeamMembers(APIView):
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
+
+class ManagerTeamMembers(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            user = request.user
+
+            # Resolve the manager as an Employee
+            manager_employee = Employee.objects.filter(user=user).first()
+            if not manager_employee:
+                return Response({
+                    'status': False,
+                    'message': 'Employee record not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # Inputs
+            data = request.data or {}
+            page = int(data.get('page', 1))
+            page_size = int(data.get('page_size', 10))
+            search_term = (data.get('search') or '').strip()
+
+            # Projects managed by this manager (via ManagerMapping or direct manager field if present)
+            managed_project_ids = set()
+
+            # If your Project has a FK "manager" to Employee (as hinted in original code)
+            direct_managed = Project.objects.filter(manager=manager_employee).values_list('id', flat=True)
+            managed_project_ids.update(direct_managed)
+
+            # Also include projects from ManagerMapping
+            mapped_projects = ManagerMapping.objects.filter(manager=manager_employee).values_list('project_id', flat=True)
+            managed_project_ids.update(mapped_projects)
+
+            if not managed_project_ids:
+                return Response({
+                    'status': True,
+                    'count': 0,
+                    'num_pages': 0,
+                    'current_page': 1,
+                    'records': []
+                }, status=status.HTTP_200_OK)
+
+            # Get every user mapped to ANY of the managed projects through UserMapping
+            # This represents "team members related to any project of a particular manager"
+            user_ids_from_project_mapping = list(
+                UserMapping.objects.filter(project_id__in=managed_project_ids)
+                .values_list('employee__user_id', flat=True)
+            )
+
+            # Additionally, include users attached to Teams that are linked to managed projects
+            # If your Team uses M2M 'project_id' to Project
+            team_ids_for_projects = list(
+                Team.objects.filter(project_id__in=managed_project_ids).values_list('id', flat=True)
+            )
+            user_ids_from_team_members = list(
+                TeamMembersMapping.objects.filter(team_id__in=team_ids_for_projects)
+                .values_list('user_id', flat=True)
+            )
+
+            # Combine both sources
+            all_user_ids = set([uid for uid in user_ids_from_project_mapping if uid] + [uid for uid in user_ids_from_team_members if uid])
+
+            # If nothing found, return empty list
+            if not all_user_ids:
+                return Response({
+                    'status': True,
+                    'count': 0,
+                    'num_pages': 0,
+                    'current_page': 1,
+                    'records': []
+                }, status=status.HTTP_200_OK)
+
+            # Base query of users
+            users_qs = User.objects.filter(id__in=all_user_ids).distinct()
+
+            # Optional search across common fields
+            if search_term:
+                users_qs = users_qs.filter(
+                    Q(name__icontains=search_term) |
+                    Q(email__icontains=search_term) |
+                    Q(username__icontains=search_term)
+                )
+
+            # Order by name for predictability
+            users_qs = users_qs.order_by('name')
+
+            # Paginate
+            paginator = Paginator(users_qs, page_size)
+            try:
+                page_obj = paginator.page(page)
+            except Exception:
+                page_obj = paginator.page(1)
+
+            # Build records
+            records = []
+            user_list = list(page_obj.object_list)
+
+            # Pre-fetch helpful structures to avoid N+1
+            # For each user, we will compute:
+            # - designation (from Employee)
+            # - teams (names under managed projects)
+            # - current active projects (Project.status == 'Ongoing') under managed projects
+
+            # Map user_id -> Employee for quick lookup
+            employees_by_user = {
+                e.user_id: e
+                for e in Employee.objects.filter(user_id__in=[u.id for u in user_list])
+            }
+
+            # Teams under managed projects
+            teams_under_managed = Team.objects.filter(project_id__in=managed_project_ids)
+
+            # TeamMemberships for users within these teams
+            memberships = TeamMembersMapping.objects.filter(
+                user_id__in=[u.id for u in user_list],
+                team_id__in=teams_under_managed.values_list('id', flat=True)
+            ).select_related('team')
+
+            # Build map: user_id -> set of team names
+            teams_by_user = {}
+            for m in memberships:
+                teams_by_user.setdefault(m.user_id, set()).add(m.team.name)
+
+            # User-to-projects via UserMapping limited to managed projects
+            mappings = UserMapping.objects.filter(
+                employee__user_id__in=[u.id for u in user_list],
+                project_id__in=managed_project_ids
+            ).select_related('project', 'employee__user')
+
+            # Build map: user_id -> list of their active ("Ongoing") projects under managed projects
+            active_projects_by_user = {}
+            for mp in mappings:
+                if getattr(mp.project, 'status', None) == 'Ongoing':
+                    active_projects_by_user.setdefault(mp.employee.user_id, set()).add(mp.project.name)
+
+            # Final record assembly
+            for u in user_list:
+                emp = employees_by_user.get(u.id)
+                team_names = sorted(list(teams_by_user.get(u.id, set())))
+                active_projects = sorted(list(active_projects_by_user.get(u.id, set())))
+                current_project_names = ', '.join(active_projects) if active_projects else 'No Active Project'
+
+                records.append({
+                    'id': str(u.id),
+                    'user_id': str(u.id),
+                    'name': u.name,
+                    'email': u.email,
+                    'username': u.username,
+                    'designation': getattr(emp, 'designation', 'N/A'),
+                    'role': u.role,
+                    'current_project': current_project_names,
+                    'teams': team_names,
+                    'status': 'Active' if active_projects else 'Available',
+                })
+
+            return Response({
+                'status': True,
+                'count': paginator.count,
+                'num_pages': paginator.num_pages,
+                'current_page': page_obj.number,
+                'records': records
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Error fetching team members',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        

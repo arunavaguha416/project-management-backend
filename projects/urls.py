@@ -23,14 +23,26 @@ urlpatterns = [
     path('manager/list/', ManagerProjectList.as_view(), name='manager-project-list'),
     
 
-    path('sprint/add/', SprintAdd.as_view(), name='sprint_add'),
-    path('sprint/list/', SprintList.as_view(), name='sprint_list'),
-    path('sprint/details/', SprintDetails.as_view(), name='sprint_details'),
-    path('sprint/update/', SprintUpdate.as_view(), name='sprint_update'),
-    path('sprint/delete/<uuid:sprint_id>/', SprintDelete.as_view(), name='sprint_delete'),
-    path('sprint/restore/', RestoreSprint.as_view(), name='sprint_restore'),
-    path('sprint/add-project/', AddProjectToSprint.as_view(), name='add_project_to_sprint'),
-    path('sprint/remove-project/', RemoveProjectFromSprint.as_view(), name='remove_project_from_sprint'),
+   
+    path('sprints/list/', SprintList.as_view(), name='sprint_list'),
+    path('sprints/details/', SprintDetails.as_view(), name='sprint_details'),
+    path('sprints/update/', SprintUpdate.as_view(), name='sprint_update'),
+    path('sprints/delete/<uuid:sprint_id>/', SprintDelete.as_view(), name='sprint_delete'),
+    path('sprints/restore/', RestoreSprint.as_view(), name='sprint_restore'),
+    path('sprints/add-project/', AddProjectToSprint.as_view(), name='add_project_to_sprint'),
+    path('sprints/remove-project/', RemoveProjectFromSprint.as_view(), name='remove_project_from_sprint'),
+    
+    path('sprints/tasks/', SprintTaskList.as_view()),
+    path('task/move/', TaskMove.as_view()),
+    path('tasks/list/', ProjectTasksList.as_view()),
+    path('backlog/list/', BacklogSimpleList.as_view()),
+    path('milestones/list/', ProjectMilestonesList.as_view()),
+    path('sprints/current/', CurrentSprint.as_view()),
+    path('sprints/start/', SprintStart.as_view()),
+    path('sprints/end/', SprintEnd.as_view()),
+    path('task/update/properties/', TaskUpdateProperties.as_view()),
+
+
 
     path('task/add/', TaskAdd.as_view(), name='task_add'),
     path('task/list/', SprintTaskList.as_view(), name='sprint_task_list'),

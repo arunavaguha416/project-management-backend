@@ -9,5 +9,6 @@ urlpatterns = [
     path('update/', TeamUpdate.as_view(), name='team-update'),
     path('delete/<uuid:time_entry_id>/', TeamDelete.as_view(), name='team-delete'),
     path('restore/', RestoreTeam.as_view(), name='team-restore'),
-    path('restore/', ProjectTeamMembers.as_view(), name='project-team-member'),
+    path('project/members/', ProjectTeamMembers.as_view(), name='project-team-member'),
+    path('members/', ManagerTeamMembers.as_view(), name='team-member'),
 ]

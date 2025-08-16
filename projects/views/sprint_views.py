@@ -9,32 +9,8 @@ from projects.models.task_model import Task
 from projects.models.comments_model import Comment
 from projects.serializers.sprint_serializer import SprintSerializer
 from django.core.paginator import Paginator
-from django.db.models import Count
-
-class SprintAdd(APIView):
-    permission_classes = (IsAdminUser,)
-
-    def post(self, request):
-        try:
-            serializer = SprintSerializer(data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({
-                    'status': True,
-                    'message': 'Sprint added successfully',
-                    'records': serializer.data
-                }, status=status.HTTP_200_OK)
-            return Response({
-                'status': False,
-                'message': 'Invalid data',
-                'errors': serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'An error occurred while adding the sprint',
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+from django.db.models import Q, Case, When, Value, IntegerField, F, Count
+from django.utils import timezone
 
 class SprintList(APIView):
     permission_classes = (IsAuthenticated,)
@@ -117,7 +93,7 @@ class SprintDetails(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 class SprintUpdate(APIView):
-    permission_classes = (IsAdminUser,)
+    permission_classes = (IsAuthenticated,)
 
     def put(self, request):
         try:
@@ -148,7 +124,7 @@ class SprintUpdate(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 class SprintDelete(APIView):
-    permission_classes = (IsAdminUser,)
+    permission_classes = (IsAuthenticated,)
 
     def delete(self, request, sprint_id):
         try:
@@ -171,7 +147,7 @@ class SprintDelete(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 class RestoreSprint(APIView):
-    permission_classes = (IsAdminUser,)
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         try:
@@ -196,7 +172,7 @@ class RestoreSprint(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 class AddProjectToSprint(APIView):
-    permission_classes = (IsAdminUser,)
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         try:
@@ -221,7 +197,7 @@ class AddProjectToSprint(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 class RemoveProjectFromSprint(APIView):
-    permission_classes = (IsAdminUser,)
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         try:
@@ -302,3 +278,223 @@ class SprintSummary(APIView):
                 'message': 'An error occurred while fetching sprint summary',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+
+
+class CurrentSprint(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            project_id = request.data.get('project_id')
+            if not project_id:
+                return Response({
+                    'status': False,
+                    'message': 'Please provide project_id'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Prefer ACTIVE sprint; else PLANNED; else latest by date/created
+            s = (Sprint.objects
+                 .filter(project__id=project_id)
+                 .order_by(
+                     # ACTIVE first, then PLANNED, then COMPLETED
+                     # then latest by start_date/created_at
+                     # Use simple ordering by status priority mapping
+                 ))
+
+            # Simple priority: ACTIVE > PLANNED > COMPLETED
+            priority_map = {'ACTIVE': 0, 'PLANNED': 1, 'COMPLETED': 2}
+            sprint = None
+            for sp in s:
+                if sprint is None:
+                    sprint = sp
+                else:
+                    if priority_map.get(sp.status, 99) < priority_map.get(sprint.status, 99):
+                        sprint = sp
+
+            if not sprint:
+                return Response({'status': True, 'records': None}, status=status.HTTP_200_OK)
+
+            data = {
+                'id': str(sprint.id),
+                'name': sprint.name,
+                'status': sprint.status,
+                'start_date': sprint.start_date,
+                'end_date': sprint.end_date,
+                'initials': sprint.initials if hasattr(sprint, 'initials') else None
+            }
+            return Response({'status': True, 'records': data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'An error occurred while fetching current sprint',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SprintStart(APIView):
+    """
+    Enhanced start sprint logic:
+    - If there is an ACTIVE sprint for the project, do NOT start a new one. Return message to complete it first.
+    - If sprint_id or an existing PLANNED sprint is provided/found, start it.
+    - If no sprint_id/PLANNED sprint and no ACTIVE sprint:
+        - Require 'initials' on first ever sprint for the project. Persist to future sprints by reading from the last sprint created for that project.
+        - Auto-generate the next sprint name: "{INITIALS} Sprint {N}" where N = 1 + max existing sprint number for that initials/project.
+        - Create the sprint with status ACTIVE.
+    Request payload:
+        {
+          "project_id": "<uuid>",
+          "sprint_id": "<uuid|null>",
+          "initials": "USA"   # only needed on first sprint for a project
+          "start_date": "YYYY-MM-DD" (optional)
+          "end_date": "YYYY-MM-DD" (optional)
+        }
+    """
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            project_id = request.data.get('project_id')
+            sprint_id = request.data.get('sprint_id')
+            initials_in = (request.data.get('initials') or '').strip().upper()
+            start_date = request.data.get('start_date')
+            end_date = request.data.get('end_date')
+
+            if not project_id:
+                return Response({'status': False, 'message': 'project_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            project = Project.objects.filter(id=project_id).first()
+            if not project:
+                return Response({'status': False, 'message': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            # 1) If an ACTIVE sprint exists, block starting a new one.
+            active_sprint = Sprint.objects.filter(project=project, status='ACTIVE').first()
+            if active_sprint:
+                return Response({
+                    'status': False,
+                    'message': 'A sprint is already ACTIVE. Complete the current sprint before starting a new one.',
+                    'records': {
+                        'id': str(active_sprint.id),
+                        'name': active_sprint.name,
+                        'status': active_sprint.status
+                    }
+                }, status=status.HTTP_200_OK)
+
+            # 2) If a specific sprint_id is provided, start that sprint.
+            if sprint_id:
+                sp = Sprint.objects.filter(id=sprint_id, project=project).first()
+                if not sp:
+                    return Response({'status': False, 'message': 'Sprint not found for this project'}, status=status.HTTP_200_OK)
+                sp.status = 'ACTIVE'
+                if start_date:
+                    sp.start_date = start_date
+                if end_date:
+                    sp.end_date = end_date
+                sp.save()
+                return Response({'status': True, 'message': 'Sprint started successfully', 'records': {'id': str(sp.id), 'name': sp.name}}, status=status.HTTP_200_OK)
+
+            # 3) If there's a PLANNED sprint, start the earliest PLANNED one.
+            planned = Sprint.objects.filter(project=project, status='PLANNED').order_by('start_date', 'created_at').first()
+            if planned:
+                planned.status = 'ACTIVE'
+                if start_date:
+                    planned.start_date = start_date
+                if end_date:
+                    planned.end_date = end_date
+                planned.save()
+                return Response({'status': True, 'message': 'Sprint started successfully', 'records': {'id': str(planned.id), 'name': planned.name}}, status=status.HTTP_200_OK)
+
+            # 4) No ACTIVE or PLANNED sprint -> create and start a new sprint with predictable naming
+            # Determine initials to use:
+            # - Prefer provided initials
+            # - Else check last sprint's initials for this project
+            last_project_sprint = Sprint.objects.filter(project=project).order_by('-created_at').first()
+            if last_project_sprint and getattr(last_project_sprint, 'initials', None):
+                effective_initials = last_project_sprint.initials
+            else:
+                # First time: must provide initials
+                if not initials_in:
+                    return Response({
+                        'status': False,
+                        'message': 'Initials are required to start the first sprint for this project.'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                effective_initials = initials_in
+
+            # Determine next sprint number for these initials on this project
+            # Expect names formatted as "{INITIALS} Sprint {N}"
+            existing_names = Sprint.objects.filter(project=project, name__istartswith=f"{effective_initials} Sprint ").values_list('name', flat=True)
+            max_num = 0
+            for nm in existing_names:
+                try:
+                    # parse trailing number
+                    parts = nm.strip().split()
+                    num = int(parts[-1])
+                    max_num = max(max_num, num)
+                except Exception:
+                    continue
+            next_num = max_num + 1
+            next_name = f"{effective_initials} Sprint {next_num}"
+
+            # Create ACTIVE sprint
+            sp_new = Sprint.objects.create(
+                project=project,
+                name=next_name,
+                description=f"Auto-created sprint {next_num} for {effective_initials}",
+                start_date=start_date or timezone.now().date(),
+                end_date=end_date,
+                status='ACTIVE',
+                # Store initials if the model has the field; ignore otherwise
+                **({'initials': effective_initials} if 'initials' in [f.name for f in Sprint._meta.get_fields()] else {})
+            )
+
+            return Response({
+                'status': True,
+                'message': 'Sprint created and started successfully',
+                'records': {'id': str(sp_new.id), 'name': sp_new.name, 'initials': effective_initials}
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'An error occurred while starting the sprint',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SprintEnd(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            sprint_id = request.data.get('sprint_id')
+            if not sprint_id:
+                return Response({
+                    'status': False,
+                    'message': 'Please provide sprint_id'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            sprint = Sprint.objects.filter(id=sprint_id).first()
+            if not sprint:
+                return Response({'status': False, 'message': 'Sprint not found'}, status=status.HTTP_200_OK)
+
+            sprint.status = 'COMPLETED'
+            sprint.save()
+
+            return Response({'status': True, 'message': 'Sprint completed successfully'}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'An error occurred while completing the sprint',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+
+
+
+
+
+
+
+
