@@ -10,6 +10,10 @@ import datetime
 from projects.models.task_model import Task
 from hr_management.models.hr_management_models import Employee
 from authentication.models.user import User
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.core.files.uploadedfile import UploadedFile
+from projects.models.project_model import ProjectFile
+
 class ProjectAdd(APIView):
     permission_classes = (IsAuthenticated,)
     
@@ -942,4 +946,78 @@ class ManagerProjectList(APIView):
                 'status': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+class UploadProjectFiles(APIView):
+    permission_classes = (IsAuthenticated,)
+    parser_classes = (MultiPartParser, FormParser,)
+
+    def post(self, request):
+        try:
+            project_id = request.data.get('project_id')
+            if not project_id:
+                return Response({
+                    'status': False,
+                    'message': 'project_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            project = Project.objects.filter(id=project_id).first()
+            if not project:
+                return Response({
+                    'status': False,
+                    'message': 'Project not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            files = request.FILES.getlist('files')
+            if not files:
+                return Response({
+                    'status': False,
+                    'message': 'No files uploaded'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            allowed_ext = {'pdf', 'docx', 'xlsx', 'jpg', 'jpeg', 'png'}
+            saved = []
+
+            # get uploader employee if exists
+            employee = Employee.objects.filter(user=request.user).first()
+
+            for f in files:
+                if not isinstance(f, UploadedFile):
+                    continue
+
+                filename = getattr(f, 'name', '')
+                ext = filename.split('.')[-1].lower() if '.' in filename else ''
+                if ext not in allowed_ext:
+                    return Response({
+                        'status': False,
+                        'message': f'Invalid file type: .{ext}'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+                pf = ProjectFile.objects.create(
+                    project=project,
+                    file=f,
+                    filename=filename,
+                    extension=ext,
+                    size=f.size or 0,
+                    uploaded_by=employee
+                )
+                saved.append({
+                    'id': str(pf.id),
+                    'filename': pf.filename,
+                    'extension': pf.extension,
+                    'size': pf.size
+                })
+
+            return Response({
+                'status': True,
+                'message': 'Files uploaded successfully',
+                'records': saved
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Error uploading files',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
 

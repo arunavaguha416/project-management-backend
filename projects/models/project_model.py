@@ -94,6 +94,21 @@ class Milestone(models.Model):
         verbose_name_plural = "Milestones"
 
 
+class ProjectFile(SoftDeletionModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='files')
+    file = models.FileField(upload_to='project_files/%Y/%m/%d/')
+    filename = models.CharField(max_length=255, blank=True)
+    extension = models.CharField(max_length=16, blank=True)
+    size = models.PositiveIntegerField(default=0)
+    uploaded_by = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "ProjectFile"
+        verbose_name_plural = "ProjectFiles"
+
+
 
 
 
