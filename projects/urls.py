@@ -20,7 +20,10 @@ urlpatterns = [
     path('employees/project/list/', EmployeeProjectList.as_view(), name='employees-project-list'),
     path('tasks/list/', ProjectTasksList.as_view(), name='project-tasks-list'),
     path('milestones/list/', ProjectMilestonesList.as_view(), name='project-milestones-list'),
-    path('manager/list/', ManagerProjectList.as_view(), name='manager-project-list'),
+    path('manager/list/', ManagerProjectList.as_view(), name='manager-list'),
+    path('upload-files/', UploadProjectFiles.as_view(), name='upload-files'),
+     path('upload-files-list/', ProjectFilesList.as_view(), name='upload-files-list'),
+    # path('abc//', UploadProjectFiles.as_view(), name='upload-files'),
     
 
    

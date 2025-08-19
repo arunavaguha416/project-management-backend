@@ -12,7 +12,14 @@ from hr_management.models.hr_management_models import Employee
 from authentication.models.user import User
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.core.files.uploadedfile import UploadedFile
-from projects.models.project_model import ProjectFile
+from projects.models.project_model import *
+
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from django.utils.text import get_valid_filename
+
+from datetime import datetime
+import os
 
 class ProjectAdd(APIView):
     permission_classes = (IsAuthenticated,)
@@ -201,7 +208,9 @@ class ProjectDetails(APIView):
             data = {
                 'id': str(project.id),
                 'name': project.name,
+                'description': project.description,
                 'manager_name': project.manager.user.name if project.manager else None,
+                'manager_id': project.manager.user.id if project.manager else None,
                 'start_date': project.start_date,
                 'end_date': project.end_date,
                 'status': project.status,
@@ -980,31 +989,63 @@ class UploadProjectFiles(APIView):
             # get uploader employee if exists
             employee = Employee.objects.filter(user=request.user).first()
 
+            # Build base path components
+            now = datetime.now()
+            year = now.strftime('%Y')      # e.g., '2025'
+            month = now.strftime('%m')     # e.g., '08'
+
+            base_dir = 'project_files'     # top-level folder
+            year_dir = os.path.join(base_dir, year)
+            month_dir = os.path.join(year_dir, month)
+            project_dir = os.path.join(month_dir, str(project_id))
+
+            # Ensure directories exist in storage
+            # default_storage.path may not exist for storages like S3, so we use exists/save logic.
+            for path in [base_dir, year_dir, month_dir, project_dir]:
+                if not default_storage.exists(path):
+                    # create a placeholder to force directory creation on some backends
+                    # then immediately delete it to keep directory clean
+                    placeholder = os.path.join(path, '.keep')
+                    default_storage.save(placeholder, ContentFile(b''))
+                    default_storage.delete(placeholder)
+
             for f in files:
                 if not isinstance(f, UploadedFile):
+                    # Skip any non-file item (rare)
                     continue
 
-                filename = getattr(f, 'name', '')
-                ext = filename.split('.')[-1].lower() if '.' in filename else ''
+                original_name = getattr(f, 'name', '')
+                # Sanitize filename for safety and portability
+                safe_name = get_valid_filename(original_name) or 'file'
+                ext = safe_name.split('.')[-1].lower() if '.' in safe_name else ''
                 if ext not in allowed_ext:
                     return Response({
                         'status': False,
                         'message': f'Invalid file type: .{ext}'
                     }, status=status.HTTP_400_BAD_REQUEST)
 
+                # Final relative path inside storage: project_files/YYYY/MM/<project_id>/<filename>
+                relative_path = os.path.join(project_dir, safe_name)
+
+                # If a file with same name exists, default_storage.save will uniquify it by appending suffix
+                saved_path = default_storage.save(relative_path, ContentFile(f.read()))
+
+                # Persist record with relative path (Django will resolve it via storage)
                 pf = ProjectFile.objects.create(
                     project=project,
-                    file=f,
-                    filename=filename,
+                    file=saved_path,      # store the path returned by storage
+                    filename=safe_name,
                     extension=ext,
                     size=f.size or 0,
                     uploaded_by=employee
                 )
+
                 saved.append({
                     'id': str(pf.id),
                     'filename': pf.filename,
                     'extension': pf.extension,
-                    'size': pf.size
+                    'size': pf.size,
+                    'path': saved_path  # relative storage path
                 })
 
             return Response({
@@ -1019,5 +1060,60 @@ class UploadProjectFiles(APIView):
                 'message': 'Error uploading files',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ProjectFilesList(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            project_id = request.data.get('project_id')
+            if not project_id:
+                return Response({
+                    'status': False,
+                    'message': 'project_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            project = Project.objects.filter(id=project_id).first()
+            if not project:
+                return Response({
+                    'status': False,
+                    'message': 'Project not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # Fetch files
+            files_qs = ProjectFile.objects.filter(project=project).order_by('-created_at')
+
+            # Build absolute or relative URLs using storage
+            records = []
+            for pf in files_qs:
+                try:
+                    url = pf.file.url  # storage-resolved URL
+                except Exception:
+                    url = None
+                records.append({
+                    'id': str(pf.id),
+                    'filename': pf.filename,
+                    'extension': pf.extension,
+                    'size': pf.size,
+                    'created_at': pf.created_at.strftime('%Y-%m-%d %H:%M:%S') if pf.created_at else None,
+                    'url': url,
+                })
+
+            return Response({
+                'status': True,
+                'count': len(records),
+                'records': records,
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Error fetching project files',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+
+
 
 
