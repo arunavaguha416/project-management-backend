@@ -3,6 +3,7 @@ from .views.projects_views import *
 from .views.task_views import *
 from .views.comment_view import *
 from .views.sprint_views import *
+from .views.ai_views import *
 
 
 urlpatterns = [
@@ -62,4 +63,8 @@ urlpatterns = [
     path('comments/update/', CommentUpdate.as_view(), name='comment-update'),
     path('comments/delete/<uuid:comment_id>/', CommentDelete.as_view(), name='comment-delete'),
     path('comments/restore/', RestoreComment.as_view(), name='comment-restore'),
+
+
+    path('sprints/ai-overview/analyze/', AISprintAnalysis.as_view(), name='ai-sprint-analysis'),
+    path('sprints/ai-overview/create-tasks/', AICreateSprintTasks.as_view(), name='ai-create-tasks'),
 ]
