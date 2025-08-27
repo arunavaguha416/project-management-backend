@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'department',
     'company',
     'channels',
+    'ai_insights',
 ]
 
 ASGI_APPLICATION = 'project_management_system.asgi.application'
