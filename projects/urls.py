@@ -38,9 +38,9 @@ urlpatterns = [
     
     path('sprints/tasks/', SprintTaskList.as_view()),
     path('task/move/', TaskMove.as_view()),
-    path('tasks/list/', ProjectTasksList.as_view()),
+    # path('tasks/list/', ProjectTasksList.as_view()),
     path('backlog/list/', BacklogSimpleList.as_view()),
-    path('milestones/list/', ProjectMilestonesList.as_view()),
+    # path('milestones/list/', ProjectMilestonesList.as_view()),
     path('sprints/current/', CurrentSprint.as_view()),
     path('sprints/start/', SprintStart.as_view()),
     path('sprints/end/', SprintEnd.as_view()),

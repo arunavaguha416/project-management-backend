@@ -667,7 +667,7 @@ class ProjectTasksList(APIView):
             if status_filter:
                 query &= Q(status__iexact=status_filter)
             
-            # Get tasks - Remove the problematic select_related
+            # Get tasks
             tasks = Task.objects.select_related('project').filter(query).order_by('-created_at')
             
             # Apply pagination
@@ -684,12 +684,24 @@ class ProjectTasksList(APIView):
                 'overdue': 0
             }
             
+            # Import datetime utilities at the top
+            from datetime import date, datetime
+            from django.utils import timezone
+            
             for task in tasks:
-                # Check if task is overdue
+                # Check if task is overdue - FIX THE DATE COMPARISON
                 is_overdue = False
                 if hasattr(task, 'due_date') and task.due_date and task.status != 'COMPLETED':
-                    from datetime import date
-                    is_overdue = task.due_date < date.today()
+                    # Convert both to the same type for comparison
+                    if isinstance(task.due_date, datetime):
+                        # If due_date is datetime, compare with today as datetime
+                        today = timezone.now().date()
+                        task_date = task.due_date.date()
+                        is_overdue = task_date < today
+                    elif isinstance(task.due_date, date):
+                        # If due_date is date, compare with today as date
+                        today = date.today()
+                        is_overdue = task.due_date < today
                 
                 # Get assignee name safely
                 assignee_name = "Unassigned"
@@ -699,18 +711,36 @@ class ProjectTasksList(APIView):
                     elif hasattr(task.assigned_to, 'name'):
                         assignee_name = task.assigned_to.name
                 
+                # Format dates safely
+                due_date_str = None
+                if hasattr(task, 'due_date') and task.due_date:
+                    if isinstance(task.due_date, datetime):
+                        due_date_str = task.due_date.date().strftime('%Y-%m-%d')
+                    else:
+                        due_date_str = task.due_date.strftime('%Y-%m-%d')
+                
+                created_at_str = None
+                if hasattr(task, 'created_at') and task.created_at:
+                    if isinstance(task.created_at, datetime):
+                        created_at_str = task.created_at.strftime('%Y-%m-%d %H:%M:%S')
+                
+                updated_at_str = None
+                if hasattr(task, 'updated_at') and task.updated_at:
+                    if isinstance(task.updated_at, datetime):
+                        updated_at_str = task.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+                
                 tasks_data.append({
                     'id': str(task.id),
                     'title': task.title,
-                    'name': task.title,  # Alternative field name
+                    'name': task.title,
                     'description': getattr(task, 'description', ''),
                     'status': task.status,
                     'priority': getattr(task, 'priority', 'Medium'),
                     'assigned_to_id': str(task.assigned_to.id) if hasattr(task, 'assigned_to') and task.assigned_to else None,
                     'assignee_name': assignee_name,
-                    'due_date': task.due_date.strftime('%Y-%m-%d') if hasattr(task, 'due_date') and task.due_date else None,
-                    'created_at': task.created_at.strftime('%Y-%m-%d %H:%M:%S') if hasattr(task, 'created_at') and task.created_at else None,
-                    'updated_at': task.updated_at.strftime('%Y-%m-%d %H:%M:%S') if hasattr(task, 'updated_at') and task.updated_at else None,
+                    'due_date': due_date_str,
+                    'created_at': created_at_str,
+                    'updated_at': updated_at_str,
                     'is_overdue': is_overdue
                 })
                 
@@ -745,6 +775,11 @@ class ProjectTasksList(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
+            # Add more detailed error logging
+            import traceback
+            print(f"Error in ProjectTasksList: {str(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
+            
             return Response({
                 'status': False,
                 'message': 'An error occurred while fetching project tasks',
