@@ -158,16 +158,58 @@ class SprintTaskList(APIView):
             if search_description:
                 query &= Q(description__icontains=search_description)
 
-            tasks = Task.objects.filter(query).order_by('-created_at')
+            # Use select_related to optimize database queries
+            tasks = Task.objects.filter(query).select_related('sprint', 'project', 'assigned_to').order_by('-created_at')
 
             if not tasks.exists():
                 return Response({'status': False, 'message': 'Tasks not found'}, status=status.HTTP_200_OK)
 
-            serializer = TaskSerializer(tasks, many=True)
-            return Response({'status': True, 'count': tasks.count(), 'records': serializer.data}, status=status.HTTP_200_OK)
+            # Build custom response data instead of using serializer
+            records = []
+            for task in tasks:
+                # Get assignee name safely
+                assignee_name = 'Unassigned'
+                if task.assigned_to:
+                    if hasattr(task.assigned_to, 'name'):
+                        assignee_name = task.assigned_to.name
+                    elif hasattr(task.assigned_to, 'username'):
+                        assignee_name = task.assigned_to.username
+
+                # Format dates safely
+                due_date_str = None
+                if task.due_date:
+                    if hasattr(task.due_date, 'date'):
+                        due_date_str = task.due_date.date().strftime('%Y-%m-%d')
+                    else:
+                        due_date_str = task.due_date.strftime('%Y-%m-%d')
+
+                records.append({
+                    'id': str(task.id),
+                    'title': task.title,
+                    'name': task.title,  # Adding name field as in your current response
+                    'description': task.description or '',
+                    'status': task.status,
+                    'priority': getattr(task, 'priority', 'MEDIUM'),
+                    'task_type': getattr(task, 'task_type', 'TASK'),
+                    'assigned_to_id': str(task.assigned_to.id) if task.assigned_to else None,
+                    'assignee_name': assignee_name,
+                    'due_date': due_date_str,
+                    'created_at': task.created_at.strftime('%Y-%m-%d %H:%M:%S') if task.created_at else None,
+                    'updated_at': task.updated_at.strftime('%Y-%m-%d %H:%M:%S') if task.updated_at else None,                    
+                    # Adding sprint information
+                    'sprint_id': str(task.sprint.id) if task.sprint else None,
+                    'sprint_name': task.sprint.name if task.sprint else None,
+                })
+
+            return Response({
+                'status': True, 
+                'count': len(records), 
+                'records': records
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class BacklogTaskList(APIView):

@@ -3,8 +3,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from django.db.models import Q
-from hr_management.models.hr_management_models import Employee, LeaveRequest
-from hr_management.serializers.hr_management_serializer import EmployeeSerializer, LeaveRequestSerializer, AttendanceSerializer
+from hr_management.models.hr_management_models import *
+from hr_management.serializers.hr_management_serializer import *
 from django.core.paginator import Paginator
 from datetime import timedelta
 from projects.models.project_model import Project, UserMapping
@@ -243,186 +243,7 @@ class RestoreEmployee(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-# LeaveRequest Views
-class LeaveRequestAdd(APIView):
-    permission_classes = (IsAuthenticated,)
 
-    def post(self, request):
-        try:
-            serializer = LeaveRequestSerializer(data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({
-                    'status': True,
-                    'message': 'Leave request added successfully',
-                    'records': serializer.data
-                }, status=status.HTTP_200_OK)
-            return Response({
-                'status': False,
-                'message': 'Invalid data',
-                'errors': serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'An error occurred while adding the leave request',
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class LeaveRequestList(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request):
-        try:
-            search_data = request.data
-            page = search_data.get('page')
-            page_size = search_data.get('page_size', 10)
-            search_reason = search_data.get('reason', '')
-
-            query = Q()
-            if search_reason:
-                query &= Q(reason__icontains=search_reason)
-
-            leave_requests = LeaveRequest.objects.filter(query).order_by('-created_at')
-
-            if leave_requests.exists():
-                if page is not None:
-                    paginator = Paginator(leave_requests, page_size)
-                    paginated_requests = paginator.get_page(page)
-                    serializer = LeaveRequestSerializer(paginated_requests, many=True)
-                    return Response({
-                        'status': True,
-                        'count': paginator.count,
-                        'num_pages': paginator.num_pages,
-                        'records': serializer.data
-                    }, status=status.HTTP_200_OK)
-                else:
-                    serializer = LeaveRequestSerializer(leave_requests, many=True)
-                    return Response({
-                        'status': True,
-                        'count': leave_requests.count(),
-                        'records': serializer.data
-                    }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Leave requests not found',
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class LeaveRequestDetails(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request):
-        try:
-            leave_request_id = request.data.get('id')
-            if leave_request_id:
-                leave_request = LeaveRequest.objects.filter(id=leave_request_id).values(
-                    'id', 'employee__user__username', 'start_date', 'end_date', 'reason', 'status'
-                ).first()
-                if leave_request:
-                    return Response({
-                        'status': True,
-                        'records': leave_request
-                    }, status=status.HTTP_200_OK)
-                else:
-                    return Response({
-                        'status': False,
-                        'message': 'Leave request not found',
-                    }, status=status.HTTP_200_OK)
-            return Response({
-                'status': False,
-                'message': 'Please provide leaveRequestId'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'An error occurred while fetching leave request details',
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class LeaveRequestUpdate(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def put(self, request):
-        try:
-            leave_request_id = request.data.get('id')
-            leave_request = LeaveRequest.objects.filter(id=leave_request_id).first()
-            if leave_request:
-                serializer = LeaveRequestSerializer(leave_request, data=request.data, partial=True)
-                if serializer.is_valid():
-                    serializer.save()
-                    return Response({
-                        'status': True,
-                        'message': 'Leave request updated successfully'
-                    }, status=status.HTTP_200_OK)
-                return Response({
-                    'status': False,
-                    'message': 'Invalid data',
-                    'errors': serializer.errors
-                }, status=status.HTTP_400_BAD_REQUEST)
-            return Response({
-                'status': False,
-                'message': 'Leave request not found'
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'An error occurred while updating the leave request',
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class LeaveRequestDelete(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def delete(self, request, leave_request_id):
-        try:
-            leave_request = LeaveRequest.objects.filter(id=leave_request_id).first()
-            if leave_request:
-                leave_request.soft_delete()
-                return Response({
-                    'status': True,
-                    'message': 'Leave request deleted successfully'
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Leave request not found'
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class RestoreLeaveRequest(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request):
-        try:
-            leave_request_id = request.data.get('id')
-            leave_request = LeaveRequest.all_objects.get(id=leave_request_id)
-            if leave_request:
-                leave_request.deleted_at = None
-                leave_request.save()
-                return Response({
-                    'status': True,
-                    'message': 'Leave request restored successfully'
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'Leave request not found'
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 # --- 3. Attendance Summary ---
@@ -515,22 +336,7 @@ class BirthdayList(APIView):
                 'status': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
-
-# --- 6. Leave Request Update ---
-class LeaveRequestUpdate(APIView):
-    permission_classes = [IsAuthenticated]
-    def put(self, request):
-        leave_id = request.data.get('id')
-        new_status = request.data.get('status', '').upper()
-        leave = LeaveRequest.objects.get(id=leave_id)
-        if new_status in ['APPROVED', 'REJECTED']:
-            leave.status = new_status
-            leave.save()
-            return Response({'status': True, 'msg': 'Leave updated'})
-        return Response({'status': False, 'msg': 'Invalid status'}, status=400)
-    
-    
+  
 class EmployeeAttendanceList(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -670,152 +476,6 @@ class EmployeeAttendanceList(APIView):
             hours = duration.total_seconds() / 3600
             return round(hours, 2)
         return None
-
-        
-class EmployeeLeaveRequestList(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        try:
-            # Get request parameters
-            employee_id = request.data.get('employee_id')
-            page_size = request.data.get('page_size', 10)
-            search = request.data.get('search', '').strip()
-            status_filter = request.data.get('status', '').strip()
-            date_from = request.data.get('date_from')
-            date_to = request.data.get('date_to')
-            
-            # Build base query
-            query = Q()
-            
-            # If specific employee_id is provided, filter by that employee
-            if employee_id:
-                user = User.objects.filter(id=employee_id).first()
-                if not user:
-                    return Response({
-                        'status': False,
-                        'message': 'User not found'
-                    }, status=status.HTTP_404_NOT_FOUND)
-                
-                employee = Employee.objects.filter(user=user).first()
-                if not employee:
-                    return Response({
-                        'status': False,
-                        'message': 'Employee record not found'
-                    }, status=status.HTTP_404_NOT_FOUND)
-                
-                query &= Q(employee=employee)
-            
-            # Permission check - regular employees can only see their own leave requests
-            if request.user.role not in ['HR', 'ADMIN', 'MANAGER']:
-                user_employee = Employee.objects.filter(user=request.user).first()
-                if user_employee:
-                    query &= Q(employee=user_employee)
-                else:
-                    return Response({
-                        'status': False,
-                        'message': 'Employee record not found for current user'
-                    }, status=status.HTTP_404_NOT_FOUND)
-            
-            # Apply search filter
-            if search:
-                query &= (
-                    Q(employee__user__name__icontains=search) |
-                    Q(reason__icontains=search) |
-                    Q(status__icontains=search)
-                )
-            
-            # Apply status filter
-            if status_filter:
-                query &= Q(status__iexact=status_filter)
-            
-            # Apply date range filters
-            if date_from:
-                query &= Q(start_date__gte=date_from)
-            if date_to:
-                query &= Q(end_date__lte=date_to)
-            
-            # Get leave requests with related data
-            leaves = LeaveRequest.objects.select_related(
-                'employee__user', 
-                'employee__department',
-                'employee__company'
-            ).filter(query).order_by('-created_at')
-            
-            # Apply pagination
-            if page_size:
-                leaves = leaves[:int(page_size)]
-            
-            # Build response data
-            leave_data = []
-            stats = {
-                'total_requests': 0,
-                'approved': 0,
-                'rejected': 0,
-                'pending': 0,
-                'total_days_requested': 0,
-                'total_days_approved': 0
-            }
-            
-            for leave in leaves:
-                # Calculate days requested
-                days_requested = 0
-                if leave.start_date and leave.end_date:
-                    days_requested = (leave.end_date - leave.start_date).days + 1
-                
-                leave_data.append({
-                    'id': str(leave.id),
-                    'employee_id': str(leave.employee.id),
-                    'employee_name': leave.employee.user.name if leave.employee.user else 'Unknown',
-                    'employee_email': leave.employee.user.email if leave.employee.user else None,
-                    'designation': leave.employee.designation,
-                    'department': leave.employee.department.name if leave.employee.department else None,
-                    'start_date': leave.start_date.strftime('%Y-%m-%d') if leave.start_date else None,
-                    'end_date': leave.end_date.strftime('%Y-%m-%d') if leave.end_date else None,
-                    'days_requested': days_requested,
-                    'reason': leave.reason,
-                    'status': leave.status,
-                    'applied_on': leave.created_at.strftime('%Y-%m-%d %H:%M:%S') if leave.created_at else None,
-                    'approved_by': leave.approved_by.name if hasattr(leave, 'approved_by') and leave.approved_by else None,
-                    'comments': getattr(leave, 'comments', None)
-                })
-                
-                # Update statistics
-                stats['total_requests'] += 1
-                stats['total_days_requested'] += days_requested
-                
-                if leave.status == 'APPROVED':
-                    stats['approved'] += 1
-                    stats['total_days_approved'] += days_requested
-                elif leave.status == 'REJECTED':
-                    stats['rejected'] += 1
-                elif leave.status == 'PENDING':
-                    stats['pending'] += 1
-            
-            return Response({
-                'status': True,
-                'message': 'Leave requests retrieved successfully',
-                'count': len(leave_data),
-                'records': leave_data,
-                'stats': stats,
-                'filters': {
-                    'employee_id': employee_id,
-                    'search': search,
-                    'status': status_filter,
-                    'date_from': date_from,
-                    'date_to': date_to,
-                    'page_size': page_size
-                }
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'An error occurred while fetching leave requests',
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 
 class EmployeeProjectList(APIView):
     permission_classes = [IsAuthenticated]
@@ -1018,51 +678,6 @@ class ManagerDashboardMetrics(APIView):
 
         
 
-
-
-class ManagerLeaveRequests(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        try:
-            # This is a placeholder implementation
-            # Replace with actual leave management logic when available
-            
-            return Response({
-                'status': True,
-                'count': 0,
-                'records': [],
-                'message': 'Leave management system not yet implemented'
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'Error fetching leave requests',
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class ManagerLeaveAction(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        try:
-            # Placeholder for leave approval/rejection
-            return Response({
-                'status': True,
-                'message': 'Leave management system not yet implemented'
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'Error processing leave action',
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-
-
-
 class GetAvailableManagers(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -1235,4 +850,756 @@ class BulkAssignProjects(APIView):
 
  
 
+class LeaveRequestsList(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            user = request.user
+            
+            # Check if user has permission (HR or MANAGER)
+            if user.role not in ['HR', 'MANAGER', 'EMPLOYEE']:
+                return Response({
+                    'status': False,
+                    'message': 'Insufficient permissions.'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get request parameters
+            search_data = request.data
+            page = int(search_data.get('page', 1))
+            page_size = int(search_data.get('page_size', 10))
+            status_filter = search_data.get('status', '').strip()
+            search_term = search_data.get('search', '').strip()
+            employee_id = search_data.get('employee_id')
+            
+            # Build base query
+            query = Q()
+            team_info = {}
+            
+            if user.role == 'HR':
+                # HR can see ALL leave requests
+                query = Q()
+                team_info['scope'] = 'All Employees'
+                team_info['total_employees'] = Employee.objects.filter(deleted_at__isnull=True).count()
+                
+            elif user.role == 'MANAGER':
+                # MANAGER can only see their team members' requests
+                manager_employee = Employee.objects.filter(user=user).first()
+                if not manager_employee:
+                    return Response({
+                        'status': False,
+                        'message': 'Manager employee record not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                
+                # Get all projects managed by this manager
+                managed_projects = Project.objects.filter(manager=manager_employee)
+                
+                # Get team members from managed projects
+                team_members_query = TeamMembersMapping.objects.filter(
+                    team__project_id__in=managed_projects
+                ).values_list('user_id', flat=True).distinct()
+                
+                # Get employees who are team members or resources
+                team_employees = Employee.objects.filter(
+                    Q(user_id__in=team_members_query) |
+                    Q(id__in=managed_projects.values_list('resource_id', flat=True)),
+                    deleted_at__isnull=True
+                ).distinct()
+                
+                query = Q(employee__in=team_employees)
+                team_info['scope'] = 'Your Team Members'
+                team_info['total_employees'] = team_employees.count()
+                
+            elif user.role == 'EMPLOYEE':
+                # EMPLOYEE can only see their own requests
+                employee = Employee.objects.filter(user=user).first()
+                if not employee:
+                    return Response({
+                        'status': False,
+                        'message': 'Employee record not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                
+                query = Q(employee=employee)
+                team_info['scope'] = 'My Requests'
+            
+            # Apply additional filters
+            if employee_id and user.role != 'EMPLOYEE':
+                query &= Q(employee_id=employee_id)
+                
+            if status_filter:
+                query &= Q(status__iexact=status_filter)
+            
+            if search_term:
+                query &= (
+                    Q(employee__user__name__icontains=search_term) |
+                    Q(employee__user__email__icontains=search_term) |
+                    Q(reason__icontains=search_term)
+                )
+            
+            # Get leave requests with employee details
+            leave_requests = LeaveRequest.objects.select_related(
+                'employee__user',
+                'employee__department'
+            ).filter(query).order_by('-created_at')
+            
+            # Apply pagination
+            if leave_requests.exists():
+                paginator = Paginator(leave_requests, page_size)
+                try:
+                    paginated_requests = paginator.page(page)
+                except Exception:
+                    paginated_requests = paginator.page(1)
+                
+                # ✅ BUILD SERIALIZABLE DATA - NO DIRECT USER OBJECTS
+                leave_data = []
+                stats = {
+                    'total_requests': 0,
+                    'approved': 0,
+                    'rejected': 0,
+                    'pending': 0,
+                    'total_days_requested': 0,
+                    'total_days_approved': 0
+                }
+                
+                for leave in paginated_requests:
+                    # Calculate days requested
+                    days_requested = 0
+                    if leave.start_date and leave.end_date:
+                        days_requested = (leave.end_date - leave.start_date).days + 1
+                    
+                    # Get employee's current leave balance
+                    try:
+                        leave_balance_obj = LeaveBalance.objects.get(employee=leave.employee)
+                        current_balance = leave_balance_obj.balance
+                    except LeaveBalance.DoesNotExist:
+                        current_balance = 24
+                    
+                    # ✅ SERIALIZE USER DATA MANUALLY - AVOID DIRECT USER OBJECT
+                    employee_data = {
+                        'id': str(leave.employee.id),
+                        'name': leave.employee.user.name if leave.employee.user else 'Unknown',
+                        'email': leave.employee.user.email if leave.employee.user else None,
+                        'username': leave.employee.user.username if leave.employee.user else None,
+                        'designation': leave.employee.designation,
+                        'department': leave.employee.department.name if leave.employee.department else None,
+                        'leave_balance': current_balance
+                    }
+                    
+                    # ✅ BUILD CLEAN SERIALIZABLE DATA
+                    request_data = {
+                        'id': str(leave.id),
+                        'employee_id': str(leave.employee.id),
+                        'employee_name': employee_data['name'],
+                        'employee_email': employee_data['email'],
+                        'employee_username': employee_data['username'],
+                        'designation': employee_data['designation'],
+                        'department': employee_data['department'],
+                        'employee_leave_balance': employee_data['leave_balance'],
+                        'start_date': leave.start_date.strftime('%Y-%m-%d') if leave.start_date else None,
+                        'end_date': leave.end_date.strftime('%Y-%m-%d') if leave.end_date else None,
+                        'days_requested': days_requested,
+                        'reason': leave.reason,
+                        'status': leave.status,
+                        'applied_on': leave.created_at.strftime('%Y-%m-%d %H:%M:%S') if leave.created_at else None,
+                        'can_approve': leave.status == 'PENDING',
+                    }
+                    
+                    # ✅ ADD APPROVAL INFO IF EXISTS (SERIALIZE SAFELY)
+                    if hasattr(leave, 'approved_by') and leave.approved_by:
+                        request_data['approved_by'] = {
+                            'name': leave.approved_by.name if leave.approved_by.name else 'Unknown',
+                            'email': leave.approved_by.email if leave.approved_by.email else None
+                        }
+                    else:
+                        request_data['approved_by'] = None
+                    
+                    if hasattr(leave, 'comments'):
+                        request_data['comments'] = leave.comments
+                    
+                    leave_data.append(request_data)
+                    
+                    # Update statistics
+                    stats['total_requests'] += 1
+                    stats['total_days_requested'] += days_requested
+                    
+                    if leave.status == 'APPROVED':
+                        stats['approved'] += 1
+                        stats['total_days_approved'] += days_requested
+                    elif leave.status == 'REJECTED':
+                        stats['rejected'] += 1
+                    elif leave.status == 'PENDING':
+                        stats['pending'] += 1
+                
+                return Response({
+                    'status': True,
+                    'message': 'Leave requests retrieved successfully',
+                    'count': paginator.count,
+                    'num_pages': paginator.num_pages,
+                    'current_page': page,
+                    'records': leave_data,  # ✅ CLEAN SERIALIZABLE DATA
+                    'stats': stats,
+                    'user_info': {
+                        'role': user.role,
+                        'name': user.name,
+                        **team_info
+                    },
+                    'filters': {
+                        'status': status_filter,
+                        'search': search_term,
+                        'employee_id': employee_id,
+                        'page_size': page_size
+                    }
+                }, status=status.HTTP_200_OK)
+            
+            else:
+                return Response({
+                    'status': False,
+                    'message': 'No leave requests found',
+                    'count': 0,
+                    'num_pages': 0,
+                    'records': [],
+                    'stats': {
+                        'total_requests': 0,
+                        'approved': 0,
+                        'rejected': 0,
+                        'pending': 0,
+                        'total_days_requested': 0,
+                        'total_days_approved': 0
+                    },
+                    'user_info': {
+                        'role': user.role,
+                        'name': user.name,
+                        **team_info
+                    }
+                }, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Error fetching leave requests',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ApplyLeave(APIView):
+    """
+    Function 2: Single function for HR, MANAGER and EMPLOYEE to apply leave
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            user = request.user
+            
+            # Get request data
+            start_date = request.data.get('start_date')
+            end_date = request.data.get('end_date')
+            reason = request.data.get('reason', '').strip()
+            employee_id = request.data.get('employee_id')  # Optional: for HR/MANAGER to apply on behalf
+            
+            # Validation
+            if not start_date or not end_date or not reason:
+                return Response({
+                    'status': False,
+                    'message': 'start_date, end_date, and reason are required fields'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Determine which employee to apply leave for
+            target_employee = None
+            
+            if employee_id and user.role in ['HR', 'MANAGER']:
+                # HR/MANAGER applying on behalf of employee
+                target_employee = Employee.objects.filter(id=employee_id).first()
+                if not target_employee:
+                    return Response({
+                        'status': False,
+                        'message': 'Employee not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                
+                # For MANAGER, verify the employee is in their team
+                if user.role == 'MANAGER':
+                    manager_employee = Employee.objects.filter(user=user).first()
+                    if manager_employee:
+                        managed_projects = Project.objects.filter(manager=manager_employee)
+                        team_members = TeamMembersMapping.objects.filter(
+                            team__project_id__in=managed_projects
+                        ).values_list('user_id', flat=True)
+                        
+                        if target_employee.user_id not in team_members:
+                            return Response({
+                                'status': False,
+                                'message': 'You can only apply leave for your team members'
+                            }, status=status.HTTP_403_FORBIDDEN)
+            else:
+                # User applying for themselves
+                target_employee = Employee.objects.filter(user=user).first()
+                if not target_employee:
+                    return Response({
+                        'status': False,
+                        'message': 'Employee record not found for current user'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Date validation
+            from datetime import datetime
+            try:
+                start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            except ValueError:
+                return Response({
+                    'status': False,
+                    'message': 'Invalid date format. Use YYYY-MM-DD'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if start_date_obj > end_date_obj:
+                return Response({
+                    'status': False,
+                    'message': 'End date must be after or equal to start date'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Calculate days requested
+            days_requested = (end_date_obj - start_date_obj).days + 1
+            
+            # Check leave balance
+            try:
+                leave_balance_obj = LeaveBalance.objects.get(employee=target_employee)
+                current_balance = leave_balance_obj.balance
+            except LeaveBalance.DoesNotExist:
+                # Create default balance if doesn't exist
+                leave_balance_obj = LeaveBalance.objects.create(
+                    employee=target_employee,
+                    balance=24
+                )
+                current_balance = 24
+            
+            if days_requested > current_balance:
+                return Response({
+                    'status': False,
+                    'message': f'Insufficient leave balance. Available: {current_balance} days, Requested: {days_requested} days'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check for overlapping leave requests
+            overlapping_requests = LeaveRequest.objects.filter(
+                employee=target_employee,
+                status__in=['PENDING', 'APPROVED'],
+                start_date__lte=end_date_obj,
+                end_date__gte=start_date_obj
+            )
+            
+            if overlapping_requests.exists():
+                return Response({
+                    'status': False,
+                    'message': 'You have overlapping leave requests for the selected dates'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Create leave request
+            leave_request = LeaveRequest.objects.create(
+                employee=target_employee,
+                start_date=start_date_obj,
+                end_date=end_date_obj,
+                reason=reason,
+                status='PENDING'
+            )
+            
+            return Response({
+                'status': True,
+                'message': 'Leave request submitted successfully',
+                'data': {
+                    'request_id': str(leave_request.id),
+                    'employee_name': target_employee.user.name if target_employee.user else 'Unknown',
+                    'start_date': leave_request.start_date.strftime('%Y-%m-%d'),
+                    'end_date': leave_request.end_date.strftime('%Y-%m-%d'),
+                    'days_requested': days_requested,
+                    'reason': leave_request.reason,
+                    'status': leave_request.status,
+                    'current_balance': current_balance,
+                    'balance_after_approval': current_balance - days_requested,
+                    'applied_by': user.name,
+                    'applied_for': target_employee.user.name if target_employee.user else 'Unknown'
+                }
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Error submitting leave request',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ApproveRejectLeave(APIView):
+    """
+    Function 3: Single function for HR and MANAGER to Approve or Reject leave
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            user = request.user
+            
+            # Check permissions
+            if user.role not in ['HR', 'MANAGER']:
+                return Response({
+                    'status': False,
+                    'message': 'Only HR and MANAGER can approve/reject leave requests'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get request data
+            request_id = request.data.get('request_id')
+            action = request.data.get('action', '').upper()
+            comments = request.data.get('comments', '')
+            
+            if not request_id:
+                return Response({
+                    'status': False,
+                    'message': 'request_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if action not in ['APPROVED', 'REJECTED']:
+                return Response({
+                    'status': False,
+                    'message': 'action must be either APPROVED or REJECTED'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get leave request
+            leave_request = LeaveRequest.objects.filter(id=request_id).first()
+            if not leave_request:
+                return Response({
+                    'status': False,
+                    'message': 'Leave request not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Check if request is still pending
+            if leave_request.status != 'PENDING':
+                return Response({
+                    'status': False,
+                    'message': f'Cannot modify leave request. Current status: {leave_request.status}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # For MANAGER: verify permission to approve this request
+            if user.role == 'MANAGER':
+                manager_employee = Employee.objects.filter(user=user).first()
+                if not manager_employee:
+                    return Response({
+                        'status': False,
+                        'message': 'Manager employee record not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                
+                # Check if employee is in manager's team
+                managed_projects = Project.objects.filter(manager=manager_employee)
+                team_members = TeamMembersMapping.objects.filter(
+                    team__project_id__in=managed_projects
+                ).values_list('user_id', flat=True)
+                
+                is_team_member = (
+                    leave_request.employee.user_id in team_members or
+                    managed_projects.filter(resource=leave_request.employee).exists()
+                )
+                
+                if not is_team_member:
+                    return Response({
+                        'status': False,
+                        'message': 'You can only approve/reject leave requests from your team members'
+                    }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Calculate days
+            days_requested = (leave_request.end_date - leave_request.start_date).days + 1
+            
+            # Get current leave balance
+            try:
+                leave_balance_obj = LeaveBalance.objects.get(employee=leave_request.employee)
+                current_balance = leave_balance_obj.balance
+            except LeaveBalance.DoesNotExist:
+                leave_balance_obj = LeaveBalance.objects.create(
+                    employee=leave_request.employee,
+                    balance=24
+                )
+                current_balance = 24
+            
+            # Update leave request
+            leave_request.status = action
+            
+            # Add approval tracking if fields exist
+            if hasattr(leave_request, 'approved_by'):
+                leave_request.approved_by = user
+            if hasattr(leave_request, 'comments'):
+                leave_request.comments = comments
+            if hasattr(leave_request, 'approved_at'):
+                leave_request.approved_at = timezone.now()
+            
+            leave_request.save()
+            
+            # Update leave balance if approved
+            balance_updated = False
+            if action == 'APPROVED':
+                if current_balance >= days_requested:
+                    leave_balance_obj.balance -= days_requested
+                    leave_balance_obj.save()
+                    balance_updated = True
+                    new_balance = leave_balance_obj.balance
+                else:
+                    new_balance = current_balance
+            else:
+                new_balance = current_balance
+            
+            return Response({
+                'status': True,
+                'message': f'Leave request {action.lower()} successfully',
+                'data': {
+                    'request_id': str(leave_request.id),
+                    'employee_name': leave_request.employee.user.name if leave_request.employee.user else 'Unknown',
+                    'employee_email': leave_request.employee.user.email if leave_request.employee.user else None,
+                    'start_date': leave_request.start_date.strftime('%Y-%m-%d'),
+                    'end_date': leave_request.end_date.strftime('%Y-%m-%d'),
+                    'days_requested': days_requested,
+                    'status': leave_request.status,
+                    'action_by': user.name,
+                    'comments': comments,
+                    'leave_balance': {
+                        'previous_balance': current_balance,
+                        'current_balance': new_balance,
+                        'balance_updated': balance_updated
+                    }
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Error processing leave action',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CurrentUserLeaveBalance(APIView):
+    """
+    Function 4: Show leave balance of current logged in user
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            user = request.user
+            
+            # Get employee record for current user
+            employee = Employee.objects.filter(user=user).first()
+            if not employee:
+                return Response({
+                    'status': False,
+                    'message': 'Employee record not found for current user'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Get leave balance
+            try:
+                leave_balance_obj = LeaveBalance.objects.get(employee=employee)
+                current_balance = leave_balance_obj.balance
+            except LeaveBalance.DoesNotExist:
+                # Create default balance
+                leave_balance_obj = LeaveBalance.objects.create(
+                    employee=employee,
+                    balance=24
+                )
+                current_balance = 24
+            
+            # Get leave statistics
+            current_year = timezone.now().year
+            
+            # Total leave requests this year
+            total_requests = LeaveRequest.objects.filter(
+                employee=employee,
+                start_date__year=current_year
+            )
+            
+            # Calculate used days (approved requests)
+            approved_requests = total_requests.filter(status='APPROVED')
+            used_days = sum([
+                (req.end_date - req.start_date).days + 1 
+                for req in approved_requests
+            ])
+            
+            # Pending requests
+            pending_requests = total_requests.filter(status='PENDING')
+            pending_days = sum([
+                (req.end_date - req.start_date).days + 1 
+                for req in pending_requests
+            ])
+            
+            return Response({
+                'status': True,
+                'message': 'Leave balance retrieved successfully',
+                'data': {
+                    'employee_info': {
+                        'id': str(employee.id),
+                        'name': user.name,
+                        'email': user.email,
+                        'designation': employee.designation,
+                        'department': employee.department.name if employee.department else None
+                    },
+                    'leave_balance': {
+                        'current_balance': current_balance,
+                        'total_allocated': 24,  # Default allocation
+                        'used_days': used_days,
+                        'pending_days': pending_days,
+                        'available_days': current_balance
+                    },
+                    'statistics': {
+                        'total_requests_this_year': total_requests.count(),
+                        'approved_requests': approved_requests.count(),
+                        'rejected_requests': total_requests.filter(status='REJECTED').count(),
+                        'pending_requests': pending_requests.count()
+                    },
+                    'year': current_year
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Error fetching leave balance',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class EmployeeLeaveBalance(APIView):
+    """
+    Function 5: Show leave balance to HR/MANAGER for specific employee (for approval decisions)
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            user = request.user
+            
+            # Check permissions
+            if user.role not in ['HR', 'MANAGER']:
+                return Response({
+                    'status': False,
+                    'message': 'Only HR and MANAGER can view employee leave balances'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get employee ID
+            employee_id = request.data.get('employee_id')
+            if not employee_id:
+                return Response({
+                    'status': False,
+                    'message': 'employee_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get target employee
+            target_employee = Employee.objects.filter(id=employee_id).first()
+            if not target_employee:
+                return Response({
+                    'status': False,
+                    'message': 'Employee not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # For MANAGER: verify employee is in their team
+            if user.role == 'MANAGER':
+                manager_employee = Employee.objects.filter(user=user).first()
+                if not manager_employee:
+                    return Response({
+                        'status': False,
+                        'message': 'Manager employee record not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                
+                managed_projects = Project.objects.filter(manager=manager_employee)
+                team_members = TeamMembersMapping.objects.filter(
+                    team__project_id__in=managed_projects
+                ).values_list('user_id', flat=True)
+                
+                is_team_member = (
+                    target_employee.user_id in team_members or
+                    managed_projects.filter(resource=target_employee).exists()
+                )
+                
+                if not is_team_member:
+                    return Response({
+                        'status': False,
+                        'message': 'You can only view leave balance for your team members'
+                    }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get leave balance
+            try:
+                leave_balance_obj = LeaveBalance.objects.get(employee=target_employee)
+                current_balance = leave_balance_obj.balance
+            except LeaveBalance.DoesNotExist:
+                current_balance = 24  # Default
+            
+            # Get leave statistics
+            current_year = timezone.now().year
+            
+            # Total leave requests this year
+            total_requests = LeaveRequest.objects.filter(
+                employee=target_employee,
+                start_date__year=current_year
+            )
+            
+            # Calculate used days (approved requests)
+            approved_requests = total_requests.filter(status='APPROVED')
+            used_days = sum([
+                (req.end_date - req.start_date).days + 1 
+                for req in approved_requests
+            ])
+            
+            # Pending requests
+            pending_requests = total_requests.filter(status='PENDING')
+            pending_days = sum([
+                (req.end_date - req.start_date).days + 1 
+                for req in pending_requests
+            ])
+            
+            # Recent leave requests
+            recent_requests = total_requests.order_by('-created_at')[:5]
+            recent_requests_data = []
+            
+            for req in recent_requests:
+                days = (req.end_date - req.start_date).days + 1
+                recent_requests_data.append({
+                    'id': str(req.id),
+                    'start_date': req.start_date.strftime('%Y-%m-%d'),
+                    'end_date': req.end_date.strftime('%Y-%m-%d'),
+                    'days': days,
+                    'reason': req.reason,
+                    'status': req.status,
+                    'applied_on': req.created_at.strftime('%Y-%m-%d')
+                })
+            
+            return Response({
+                'status': True,
+                'message': 'Employee leave balance retrieved successfully',
+                'data': {
+                    'employee_info': {
+                        'id': str(target_employee.id),
+                        'name': target_employee.user.name if target_employee.user else 'Unknown',
+                        'email': target_employee.user.email if target_employee.user else None,
+                        'designation': target_employee.designation,
+                        'department': target_employee.department.name if target_employee.department else None
+                    },
+                    'leave_balance': {
+                        'current_balance': current_balance,
+                        'total_allocated': 24,
+                        'used_days': used_days,
+                        'pending_days': pending_days,
+                        'available_days': current_balance
+                    },
+                    'statistics': {
+                        'total_requests_this_year': total_requests.count(),
+                        'approved_requests': approved_requests.count(),
+                        'rejected_requests': total_requests.filter(status='REJECTED').count(),
+                        'pending_requests': pending_requests.count()
+                    },
+                    'recent_requests': recent_requests_data,
+                    'year': current_year,
+                    'requested_by': {
+                        'role': user.role,
+                        'name': user.name
+                    }
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Error fetching employee leave balance',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
 

@@ -42,22 +42,27 @@ class Attendance(models.Model):
 class LeaveBalance(models.Model):
     employee = models.OneToOneField(Employee, on_delete=models.CASCADE)
     balance = models.IntegerField(default=24)
+
+
 class LeaveRequest(SoftDeletionModel):
     STATUS_TYPES = (
         ('PENDING', 'Pending'),
         ('APPROVED', 'Approved'),
         ('REJECTED', 'Rejected'),
     )
-
-    id = models.UUIDField(primary_key=True, 
-                        default=uuid.uuid4, 
-                        editable=False, 
-                        unique=True)
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     start_date = models.DateField()
     end_date = models.DateField()
     reason = models.TextField(blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_TYPES, default='Pending')
+    status = models.CharField(max_length=20, choices=STATUS_TYPES, default='PENDING')
+    
+    # Enhanced tracking fields
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_leaves')
+    comments = models.TextField(blank=True, help_text="Approver's comments")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)

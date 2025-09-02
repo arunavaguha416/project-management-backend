@@ -667,8 +667,8 @@ class ProjectTasksList(APIView):
             if status_filter:
                 query &= Q(status__iexact=status_filter)
             
-            # Get tasks
-            tasks = Task.objects.select_related('project').filter(query).order_by('-created_at')
+            # Get tasks with sprint information - ADD select_related for sprint
+            tasks = Task.objects.select_related('project', 'sprint', 'assigned_to').filter(query).order_by('-created_at')
             
             # Apply pagination
             if page_size:
@@ -741,7 +741,10 @@ class ProjectTasksList(APIView):
                     'due_date': due_date_str,
                     'created_at': created_at_str,
                     'updated_at': updated_at_str,
-                    'is_overdue': is_overdue
+                    'is_overdue': is_overdue,
+                    # ADD SPRINT INFORMATION HERE
+                    'sprint_id': str(task.sprint.id) if task.sprint else None,
+                    'sprint_name': task.sprint.name if task.sprint else None,
                 })
                 
                 # Update statistics
@@ -785,6 +788,7 @@ class ProjectTasksList(APIView):
                 'message': 'An error occurred while fetching project tasks',
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 class ProjectMilestonesList(APIView):

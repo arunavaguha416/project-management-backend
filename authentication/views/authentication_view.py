@@ -127,7 +127,13 @@ class Registration(APIView):
                     designation=data.get('designation'),
                     company_id=data.get('comp_id'),
                     department_id=data.get('dept_id'),
-                    # phone=data.get('phone', '')  # Uncomment if you want phone support
+                    # phone=data.get('phone', '') # Uncomment if you want phone support
+                )
+
+                # NEW: Create LeaveBalance record with 20 days balance
+                LeaveBalance.objects.create(
+                    employee=employee,
+                    balance=20  # Set default balance to 20 days
                 )
 
                 # Use serializer for Employee representation in response
@@ -135,12 +141,13 @@ class Registration(APIView):
 
                 return Response({
                     'status': True,
-                    'message': 'User registered successfully',
+                    'message': 'User registered successfully with leave balance',
                     'data': {
                         'user': user_serializer.data,
                         'employee': employee_data
                     }
                 }, status=status.HTTP_201_CREATED)
+
         except Exception as e:
             return Response({
                 'status': False,
