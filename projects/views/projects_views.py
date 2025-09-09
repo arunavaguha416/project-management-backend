@@ -18,6 +18,17 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.utils.text import get_valid_filename
 
+
+from django.http import HttpResponse
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from io import BytesIO
+from datetime import datetime
+import uuid
+
 from datetime import datetime
 import os
 
@@ -1153,6 +1164,185 @@ class ProjectFilesList(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
         
 
+
+class GenerateProjectInvoice(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            project_id = request.data.get('project_id')
+            
+            if not project_id:
+                return Response({
+                    'status': False,
+                    'message': 'Project ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get project with related data
+            project = Project.objects.select_related('manager__user').filter(id=project_id).first()
+            
+            if not project:
+                return Response({
+                    'status': False,
+                    'message': 'Project not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Only allow invoice generation for completed projects
+            if project.status != 'Completed':
+                return Response({
+                    'status': False,
+                    'message': 'Invoice can only be generated for completed projects'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get project team members
+            team_members = UserMapping.objects.select_related('employee__user').filter(project=project)
+            
+            # Get project tasks for billing calculation
+            tasks = Task.objects.filter(project=project)
+            completed_tasks = tasks.filter(status__in=['COMPLETED', 'DONE'])
+            
+            # Generate PDF
+            pdf_buffer = self.generate_invoice_pdf(project, team_members, completed_tasks)
+            
+            # Return PDF as response
+            response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="invoice-{project.name}-{datetime.now().strftime("%Y%m%d")}.pdf"'
+            
+            return response
+            
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Error generating invoice',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def generate_invoice_pdf(self, project, team_members, completed_tasks):
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Invoice Header
+        title_style = styles['Title']
+        title_style.textColor = colors.darkblue
+        story.append(Paragraph("PROJECT INVOICE", title_style))
+        story.append(Spacer(1, 20))
+        
+        # Invoice Details
+        invoice_number = f"INV-{project.id.hex[:8].upper()}"
+        invoice_date = datetime.now().strftime("%B %d, %Y")
+        
+        invoice_details = [
+            ['Invoice Number:', invoice_number],
+            ['Invoice Date:', invoice_date],
+            ['Project Name:', project.name],
+            ['Project Status:', project.status],
+            ['Project Manager:', project.manager.user.name if project.manager and project.manager.user else 'Unassigned'],
+            ['Start Date:', project.start_date.strftime("%B %d, %Y") if project.start_date else 'Not set'],
+            ['End Date:', project.end_date.strftime("%B %d, %Y") if project.end_date else 'Not set'],
+        ]
+        
+        details_table = Table(invoice_details, colWidths=[120, 300])
+        details_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        
+        story.append(details_table)
+        story.append(Spacer(1, 30))
+        
+        # Project Description
+        if project.description:
+            story.append(Paragraph("<b>Project Description:</b>", styles['Heading3']))
+            story.append(Paragraph(project.description, styles['Normal']))
+            story.append(Spacer(1, 20))
+        
+        # Team Members Section
+        story.append(Paragraph("<b>Team Members:</b>", styles['Heading3']))
+        
+        if team_members.exists():
+            team_data = [['Name', 'Email', 'Designation']]
+            for member in team_members:
+                team_data.append([
+                    member.employee.user.name if member.employee.user else 'Unknown',
+                    member.employee.user.email if member.employee.user else 'No email',
+                    member.employee.designation or 'Team Member'
+                ])
+            
+            team_table = Table(team_data, colWidths=[150, 200, 150])
+            team_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            story.append(team_table)
+        else:
+            story.append(Paragraph("No team members assigned", styles['Normal']))
+        
+        story.append(Spacer(1, 30))
+        
+        # Project Summary
+        story.append(Paragraph("<b>Project Summary:</b>", styles['Heading3']))
+        
+        total_tasks = len(completed_tasks) if hasattr(completed_tasks, '__len__') else completed_tasks.count()
+        team_size = team_members.count() if team_members.exists() else 0
+        
+        # Calculate basic billing (you can customize this logic)
+        base_rate = 100  # Base rate per task
+        team_multiplier = max(1, team_size * 0.1)  # 10% increase per team member
+        priority_multiplier = {
+            'LOW': 0.8,
+            'MEDIUM': 1.0,
+            'HIGH': 1.2,
+            'CRITICAL': 1.5
+        }.get(project.priority, 1.0)
+        
+        subtotal = total_tasks * base_rate * team_multiplier * priority_multiplier
+        tax_rate = 0.18  # 18% tax
+        tax_amount = subtotal * tax_rate
+        total_amount = subtotal + tax_amount
+        
+        billing_data = [
+            ['Description', 'Quantity', 'Rate', 'Amount'],
+            [f'Completed Tasks ({project.priority} Priority)', str(total_tasks), f'${base_rate * team_multiplier * priority_multiplier:.2f}', f'${subtotal:.2f}'],
+            ['', '', 'Subtotal:', f'${subtotal:.2f}'],
+            ['', '', f'Tax ({tax_rate*100}%):', f'${tax_amount:.2f}'],
+            ['', '', 'Total Amount:', f'${total_amount:.2f}']
+        ]
+        
+        billing_table = Table(billing_data, colWidths=[200, 80, 100, 100])
+        billing_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (2, -2), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -3), 1, colors.black),
+            ('LINEBELOW', (2, -3), (-1, -3), 2, colors.black),
+            ('BACKGROUND', (2, -1), (-1, -1), colors.lightgrey),
+        ]))
+        
+        story.append(billing_table)
+        story.append(Spacer(1, 40))
+        
+        # Footer
+        story.append(Paragraph("<b>Thank you for your business!</b>", styles['Normal']))
+        story.append(Paragraph(f"Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", styles['Italic']))
+        
+        doc.build(story)
+        buffer.seek(0)
+        return buffer
+    
 
 
 

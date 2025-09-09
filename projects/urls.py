@@ -24,6 +24,9 @@ urlpatterns = [
     path('manager/list/', ManagerProjectList.as_view(), name='manager-list'),
     path('upload-files/', UploadProjectFiles.as_view(), name='upload-files'),
      path('upload-files-list/', ProjectFilesList.as_view(), name='upload-files-list'),
+     # In your projects URLs
+    path('generate-invoice/', GenerateProjectInvoice.as_view(), name='generate-invoice'),
+
     # path('abc//', UploadProjectFiles.as_view(), name='upload-files'),
     
 
