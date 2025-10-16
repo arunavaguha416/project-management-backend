@@ -1603,3 +1603,179 @@ class EmployeeLeaveBalance(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
+
+
+# Add this to hr_management_views.py at the end
+
+class HRDashboardMetrics(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        if request.user.role != 'HR':
+            return Response({
+                'status': False,
+                'message': 'Only HR can access dashboard metrics'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            department_name = request.query_params.get('department', '')
+            time_range = request.query_params.get('timeRange', 'year')
+            employee_qs = Employee.objects.all()
+            leave_qs = LeaveRequest.objects.all()
+            attendance_qs = Attendance.objects.all()
+
+            # Apply time range filter
+            current_date = timezone.now()
+            if time_range == 'month':
+                start_date = current_date - timedelta(days=30)
+                employee_qs = employee_qs.filter(date_of_joining__gte=start_date)
+                leave_qs = leave_qs.filter(start_date__gte=start_date)
+                attendance_qs = attendance_qs.filter(date__gte=start_date)
+            elif time_range == 'year':
+                start_date = current_date - timedelta(days=365)
+                employee_qs = employee_qs.filter(date_of_joining__gte=start_date)
+                leave_qs = leave_qs.filter(start_date__gte=start_date)
+                attendance_qs = attendance_qs.filter(date__gte=start_date)
+
+            if department_name:
+                department = Department.objects.filter(name=department_name).first()
+                if not department:
+                    return Response({'status': False, 'message': 'Department not found'}, status=400)
+                employee_qs = employee_qs.filter(department=department)
+                leave_qs = leave_qs.filter(employee__department=department)
+                attendance_qs = attendance_qs.filter(employee__department=department)
+
+            # Total employees
+            total_employees = employee_qs.count()
+
+            # New hires
+            current_month = current_date.month
+            current_year = current_date.year
+            new_hires = employee_qs.filter(date_of_joining__month=current_month, date_of_joining__year=current_year).count()
+
+            # Pending leaves
+            pending_leaves = leave_qs.filter(status='PENDING').count()
+
+            # Total and average salary
+            salaries = []
+            for emp in employee_qs:
+                try:
+                    sal = float(emp.salary)
+                    salaries.append(sal)
+                except ValueError:
+                    pass
+            total_salary = sum(salaries)
+            avg_salary = total_salary / len(salaries) if salaries else 0
+
+            # Department count
+            dept_qs = Department.objects.all()
+            if department_name:
+                dept_qs = dept_qs.filter(name=department_name)
+            dept_count = dept_qs.count()
+
+            # Bar heights - employees per department
+            bar_heights = []
+            max_emp = 1
+            for d in Department.objects.all():
+                count = Employee.objects.filter(department=d).count()
+                bar_heights.append(count)
+                if count > max_emp:
+                    max_emp = count
+            bar_heights = [round((c / max_emp * 100), 1) if max_emp > 0 else 0 for c in bar_heights]
+
+            # Line points - employees joined per month
+            line_points = []
+            months = 12 if time_range == 'year' else 1 if time_range == 'month' else 24
+            for m in range(1, months + 1):
+                month_date = current_date - timedelta(days=30 * (12 - m)) if time_range == 'year' else current_date
+                count = Employee.objects.filter(date_of_joining__month=month_date.month, date_of_joining__year=month_date.year).count()
+                y = 50 - count * 5  # Arbitrary scaling for SVG
+                line_points.append(y)
+            line_str = ''
+            for i, y in enumerate(line_points):
+                x = 10 + i * (180 / (months - 1)) if months > 1 else 10
+                line_str += f"{round(x)},{round(y)} "
+            line_points_str = line_str.strip()
+
+            # Pie dasharray - approved leaves percentage
+            total_leaves = leave_qs.count()
+            approved = leave_qs.filter(status='APPROVED').count()
+            approved_perc = round((approved / total_leaves * 100), 1) if total_leaves > 0 else 0
+            pie_dasharray = f"{approved_perc} {100 - approved_perc}"
+
+            # Company stats - per department
+            stats = []
+            for d in dept_qs:
+                emps = employee_qs.filter(department=d)
+                emp_count = emps.count()
+                dept_salaries = []
+                for e in emps:
+                    try:
+                        dept_salaries.append(float(e.salary))
+                    except:
+                        pass
+                dept_avg_salary = sum(dept_salaries) / len(dept_salaries) if dept_salaries else 0
+                stats.append({
+                    "label": d.name,
+                    "primary": round(dept_avg_salary),
+                    "secondary": emp_count
+                })
+
+            # Donuts - attendance rate, leave rate
+            current_date = timezone.now().date()
+            attendance_today = attendance_qs.filter(date=current_date).count()
+            attendance_rate = round((attendance_today / total_employees * 100), 1) if total_employees > 0 else 0
+            leave_rate = round((pending_leaves / total_employees * 100), 1) if total_employees > 0 else 0
+
+            # Turnover rate (simulated as percentage of employees with end_date)
+            turnover_data = []
+            for m in range(1, 7):  # Last 6 months for turnover
+                month_date = current_date - timedelta(days=30 * (6 - m))
+                terminated = Employee.objects.filter(end_date__month=month_date.month, end_date__year=month_date.year).count()
+                total = Employee.objects.filter(date_of_joining__lte=month_date).count()
+                rate = round((terminated / total * 100), 1) if total > 0 else 0
+                turnover_data.append({"month": month_date.strftime('%b'), "rate": rate})
+
+            # Title and filters
+            company_name = Employee.objects.first().company.name if Employee.objects.exists() else 'HR Dashboard'
+            filter_options = list(Department.objects.values_list('name', flat=True))
+
+            data = {
+                "title": company_name,
+                "filter_options": filter_options,
+                "economics": {
+                    "cost": round(total_salary),
+                    "revenue": round(avg_salary),
+                    "orders": total_employees,
+                    "profit": new_hires,
+                    "returns": pending_leaves
+                },
+                "diversity": {
+                    "value": dept_count,
+                    "bar_heights": bar_heights
+                },
+                "website": {
+                    "line_points": line_points_str
+                },
+                "employee": {
+                    "pie_dasharray": pie_dasharray
+                },
+                "company": {
+                    "stats": stats,
+                    "donuts": [attendance_rate, leave_rate]
+                },
+                "turnover": turnover_data
+            }
+
+            return Response({
+                'status': True,
+                'message': 'Dashboard metrics retrieved successfully',
+                'data': data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Error fetching dashboard metrics',
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)

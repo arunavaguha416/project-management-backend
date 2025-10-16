@@ -33,4 +33,7 @@ urlpatterns = [
     
     # Function 5: Employee leave balance (for HR/MANAGER)
     path('leave/employee-balance/', EmployeeLeaveBalance.as_view(), name='employee-leave-balance'),
+
+    # Add this line to urlpatterns in urls.py
+    path('hr/dashboard-metrics/', HRDashboardMetrics.as_view(), name='hr-dashboard-metrics'),
 ]
