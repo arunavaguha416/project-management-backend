@@ -1662,7 +1662,7 @@ class HRDashboardMetrics(APIView):
                 try:
                     sal = float(emp.salary)
                     salaries.append(sal)
-                except ValueError:
+                except Exception:
                     pass
             total_salary = sum(salaries)
             avg_salary = total_salary / len(salaries) if salaries else 0
@@ -1685,7 +1685,7 @@ class HRDashboardMetrics(APIView):
 
             # Line points - employees joined per month
             line_points = []
-            months = 12 if time_range == 'year' else 1 if time_range == 'month' else 24
+            months = 12 if time_range == 'year' else (1 if time_range == 'month' else 24)
             for m in range(1, months + 1):
                 month_date = current_date - timedelta(days=30 * (12 - m)) if time_range == 'year' else current_date
                 count = Employee.objects.filter(date_of_joining__month=month_date.month, date_of_joining__year=month_date.year).count()
@@ -1712,7 +1712,7 @@ class HRDashboardMetrics(APIView):
                 for e in emps:
                     try:
                         dept_salaries.append(float(e.salary))
-                    except:
+                    except Exception:
                         pass
                 dept_avg_salary = sum(dept_salaries) / len(dept_salaries) if dept_salaries else 0
                 stats.append({
@@ -1727,17 +1727,17 @@ class HRDashboardMetrics(APIView):
             attendance_rate = round((attendance_today / total_employees * 100), 1) if total_employees > 0 else 0
             leave_rate = round((pending_leaves / total_employees * 100), 1) if total_employees > 0 else 0
 
-            # Turnover rate (simulated as percentage of employees with end_date)
+            # Turnover rate (simulated as percentage of employees with deleted_at as termination date)
             turnover_data = []
-            for m in range(1, 7):  # Last 6 months for turnover
+            for m in range(1, 7):  # Last 6 months
                 month_date = current_date - timedelta(days=30 * (6 - m))
-                terminated = Employee.objects.filter(end_date__month=month_date.month, end_date__year=month_date.year).count()
+                terminated = Employee.objects.filter(deleted_at__month=month_date.month, deleted_at__year=month_date.year).count()
                 total = Employee.objects.filter(date_of_joining__lte=month_date).count()
                 rate = round((terminated / total * 100), 1) if total > 0 else 0
                 turnover_data.append({"month": month_date.strftime('%b'), "rate": rate})
 
             # Title and filters
-            company_name = Employee.objects.first().company.name if Employee.objects.exists() else 'HR Dashboard'
+            company_name = Employee.objects.first().company.name if Employee.objects.exists() and Employee.objects.first().company else 'HR Dashboard'
             filter_options = list(Department.objects.values_list('name', flat=True))
 
             data = {

@@ -68,7 +68,7 @@ class SprintDetails(APIView):
             sprint_id = request.data.get('id')
             if sprint_id:
                 sprint = Sprint.objects.filter(id=sprint_id).values(
-                    'id', 'name', 'description', 'start_date', 'end_date', 'projects__id', 'projects__name'
+                    'id', 'name', 'description', 'start_date', 'end_date', 'project__id', 'project__name'
                 ).first()
                 if sprint:
                     return Response({
@@ -279,8 +279,6 @@ class SprintSummary(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
         
-
-
 class CurrentSprint(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -331,7 +329,6 @@ class CurrentSprint(APIView):
                 'message': 'An error occurred while fetching current sprint',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class SprintStart(APIView):
     """
@@ -461,7 +458,6 @@ class SprintStart(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class SprintEnd(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -490,6 +486,101 @@ class SprintEnd(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
         
+class BacklogForSprint(APIView):
+    """
+    POST payload:
+    {
+      "sprint_id": "<uuid>",
+      "title": "<optional search title>",
+      "description": "<optional search description>",
+      "page_size": <optional int, default 50>
+    }
+
+    Returns backlog tasks for the sprint's project (tasks with sprint IS NULL).
+    """
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            sprint_id = request.data.get('sprint_id')
+            if not sprint_id:
+                return Response({'status': False, 'message': 'Please provide sprint_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Fetch sprint
+            sprint = Sprint.objects.filter(id=sprint_id).select_related('project').first()
+            if not sprint:
+                return Response({'status': False, 'message': 'Sprint not found'}, status=status.HTTP_200_OK)
+
+            # Optional filters
+            search_title = (request.data.get('title') or '').strip()
+            search_description = (request.data.get('description') or '').strip()
+            page_size = int(request.data.get('page_size', 50))
+
+            # Build query: same project, sprint is NULL -> backlog for that project/sprint
+            query = Q(project=sprint.project, sprint__isnull=True)
+            if search_title:
+                query &= Q(title__icontains=search_title)
+            if search_description:
+                query &= Q(description__icontains=search_description)
+
+            # Select related to avoid N+1
+            tasks_qs = Task.objects.filter(query).select_related('project', 'assigned_to').order_by('-created_at')
+
+            # Limit by page_size
+            if page_size:
+                tasks_qs = tasks_qs[:page_size]
+
+            if not tasks_qs.exists():
+                return Response({'status': False, 'message': 'Backlog tasks not found'}, status=status.HTTP_200_OK)
+
+            records = []
+            for t in tasks_qs:
+                # compute assignee name safely
+                assignee_name = 'Unassigned'
+                if getattr(t, 'assigned_to', None):
+                    # assigned_to may be Employee or User depending on your auth model
+                    if hasattr(t.assigned_to, 'user') and getattr(t.assigned_to.user, 'name', None):
+                        assignee_name = t.assigned_to.user.name
+                    elif getattr(t.assigned_to, 'name', None):
+                        assignee_name = t.assigned_to.name
+                    elif getattr(t.assigned_to, 'username', None):
+                        assignee_name = t.assigned_to.username
+
+                due_date_str = None
+                if getattr(t, 'due_date', None):
+                    try:
+                        due_date_str = t.due_date.strftime('%Y-%m-%d')
+                    except Exception:
+                        # If due_date is datetime-like with .date()
+                        try:
+                            due_date_str = t.due_date.date().strftime('%Y-%m-%d')
+                        except Exception:
+                            due_date_str = None
+
+                records.append({
+                    'id': str(t.id),
+                    'title': t.title,
+                    'name': t.title,
+                    'description': t.description or '',
+                    'status': t.status,
+                    'priority': getattr(t, 'priority', 'MEDIUM'),
+                    'assignee_name': assignee_name,
+                    'assigned_to_id': str(t.assigned_to.id) if getattr(t, 'assigned_to', None) else None,
+                    'due_date': due_date_str,
+                    'created_at': t.created_at.strftime('%Y-%m-%d %H:%M:%S') if getattr(t, 'created_at', None) else None,
+                    'updated_at': t.updated_at.strftime('%Y-%m-%d %H:%M:%S') if getattr(t, 'updated_at', None) else None,
+                    'project_id': str(t.project.id) if getattr(t, 'project', None) else None,
+                    'project_name': t.project.name if getattr(t, 'project', None) else None,
+                    # sprint fields are null (backlog)
+                    'sprint_id': None,
+                    'sprint_name': None,
+                })
+
+            return Response({'status': True, 'count': len(records), 'records': records}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'status': False, 'message': 'An error occurred while fetching backlog tasks', 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 

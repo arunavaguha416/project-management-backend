@@ -38,6 +38,7 @@ urlpatterns = [
     path('sprints/restore/', RestoreSprint.as_view(), name='sprint_restore'),
     path('sprints/add-project/', AddProjectToSprint.as_view(), name='add_project_to_sprint'),
     path('sprints/remove-project/', RemoveProjectFromSprint.as_view(), name='remove_project_from_sprint'),
+    path('sprints/backlog/', BacklogForSprint.as_view(), name='sprint_backlog'),
     
     path('sprints/tasks/', SprintTaskList.as_view()),
     path('task/move/', TaskMove.as_view()),
