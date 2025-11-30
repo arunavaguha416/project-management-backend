@@ -83,7 +83,6 @@ class ProjectAdd(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class ProjectList(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -155,7 +154,6 @@ class ProjectList(APIView):
                 'status': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class DeletedProjectList(APIView):
     permission_classes = (IsAuthenticated,)
@@ -321,7 +319,6 @@ class RestoreProject(APIView):
                 'status': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-        
 
 class ProjectSummary(APIView):
     permission_classes = [IsAuthenticated]
@@ -422,7 +419,6 @@ class ManagerProjects(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class AssignProjectManager(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -494,7 +490,6 @@ class AssignProjectManager(APIView):
                 'message': 'An error occurred while assigning project manager',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class EmployeeProjectList(APIView):
     permission_classes = [IsAuthenticated]
@@ -633,7 +628,6 @@ class EmployeeProjectList(APIView):
                 'message': 'An error occurred while fetching employee projects',
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class ProjectTasksList(APIView):
     permission_classes = [IsAuthenticated]
@@ -800,8 +794,6 @@ class ProjectTasksList(APIView):
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-
 class ProjectMilestonesList(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -918,9 +910,6 @@ class ProjectMilestonesList(APIView):
                 'message': 'An error occurred while fetching project milestones',
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
 
 class ManagerProjectList(APIView):
     permission_classes = (IsAuthenticated,)
@@ -1111,7 +1100,6 @@ class UploadProjectFiles(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class ProjectFilesList(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -1163,8 +1151,6 @@ class ProjectFilesList(APIView):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
         
-
-
 class GenerateProjectInvoice(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -1343,6 +1329,60 @@ class GenerateProjectInvoice(APIView):
         buffer.seek(0)
         return buffer
     
+class ProjectUsers(APIView):
+    permission_classes = (IsAuthenticated,)
 
+    def post(self, request):
+        """
+        POST payload:
+        { "project_id": "<uuid>" }
+
+        Returns:
+        { status: True, records: [{ id, name, email, username }] }
+        """
+        try:
+            project_id = request.data.get('project_id')
+            if not project_id:
+                return Response({'status': False, 'message': 'project_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            project = Project.objects.filter(id=project_id).first()
+            if not project:
+                return Response({'status': False, 'message': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Use UserMapping (used in other views) to fetch assigned users to project
+            # If your mapping model name differs, replace UserMapping with correct model
+            mappings = UserMapping.objects.select_related('employee__user').filter(project=project)
+
+            records = []
+            for m in mappings:
+                emp = getattr(m, 'employee', None)
+                user = getattr(emp, 'user', None) if emp else None
+                if user:
+                    records.append({
+                        'id': str(user.id),
+                        'name': getattr(user, 'name', None) or getattr(user, 'username', None) or 'Unknown',
+                        'email': getattr(user, 'email', None),
+                        'username': getattr(user, 'username', None)
+                    })
+
+            # Also include project manager if present (avoid duplicates)
+            try:
+                manager = getattr(project, 'manager', None)
+                if manager and getattr(manager, 'user', None):
+                    user_obj = manager.user
+                    if not any(r['id'] == str(user_obj.id) for r in records):
+                        records.append({
+                            'id': str(user_obj.id),
+                            'name': getattr(user_obj, 'name', None) or getattr(user_obj, 'username', None),
+                            'email': getattr(user_obj, 'email', None),
+                            'username': getattr(user_obj, 'username', None)
+                        })
+            except Exception:
+                pass
+
+            return Response({'status': True, 'count': len(records), 'records': records}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 

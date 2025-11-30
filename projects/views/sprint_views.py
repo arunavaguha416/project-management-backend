@@ -581,7 +581,43 @@ class BacklogForSprint(APIView):
         except Exception as e:
             return Response({'status': False, 'message': 'An error occurred while fetching backlog tasks', 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+class ProjectSprints(APIView):
+    permission_classes = (IsAuthenticated,)
 
+    def post(self, request):
+        """
+        POST payload:
+        { "project_id": "<uuid>" }
+
+        Returns sprints for project ordered by start_date desc
+        """
+        try:
+            project_id = request.data.get('project_id')
+            if not project_id:
+                return Response({'status': False, 'message': 'project_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            project = Project.objects.filter(id=project_id).first()
+            if not project:
+                return Response({'status': False, 'message': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            sprints = Sprint.objects.filter(project=project).order_by('-start_date', '-created_at')
+            if not sprints.exists():
+                return Response({'status': False, 'message': 'Sprints not found', 'records': []}, status=status.HTTP_200_OK)
+
+            records = []
+            for s in sprints:
+                records.append({
+                    'id': str(s.id),
+                    'name': s.name,
+                    'status': s.status,
+                    'start_date': s.start_date.strftime('%Y-%m-%d') if getattr(s, 'start_date', None) else None,
+                    'end_date': s.end_date.strftime('%Y-%m-%d') if getattr(s, 'end_date', None) else None,
+                })
+
+            return Response({'status': True, 'count': len(records), 'records': records}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 

@@ -26,6 +26,7 @@ urlpatterns = [
      path('upload-files-list/', ProjectFilesList.as_view(), name='upload-files-list'),
      # In your projects URLs
     path('generate-invoice/', GenerateProjectInvoice.as_view(), name='generate-invoice'),
+    path('users/', ProjectUsers.as_view(), name='project-users'),
 
     # path('abc//', UploadProjectFiles.as_view(), name='upload-files'),
     
@@ -39,6 +40,7 @@ urlpatterns = [
     path('sprints/add-project/', AddProjectToSprint.as_view(), name='add_project_to_sprint'),
     path('sprints/remove-project/', RemoveProjectFromSprint.as_view(), name='remove_project_from_sprint'),
     path('sprints/backlog/', BacklogForSprint.as_view(), name='sprint_backlog'),
+    path('sprints/project/', ProjectSprints.as_view(), name='project-sprints'),
     
     path('sprints/tasks/', SprintTaskList.as_view()),
     path('task/move/', TaskMove.as_view()),
@@ -71,4 +73,7 @@ urlpatterns = [
 
     path('sprints/ai-overview/analyze/', AISprintAnalysis.as_view(), name='ai-sprint-analysis'),
     path('sprints/ai-overview/create-tasks/', AICreateSprintTasks.as_view(), name='ai-create-tasks'),
+
+  
+
 ]
