@@ -41,6 +41,7 @@ urlpatterns = [
     path('sprints/remove-project/', RemoveProjectFromSprint.as_view(), name='remove_project_from_sprint'),
     path('sprints/backlog/', BacklogForSprint.as_view(), name='sprint_backlog'),
     path('sprints/project/', ProjectSprints.as_view(), name='project-sprints'),
+    path('sprints/summary/', SprintSummary.as_view(), name='sprints-summary'),
     
     path('sprints/tasks/', SprintTaskList.as_view()),
     path('task/move/', TaskMove.as_view()),
