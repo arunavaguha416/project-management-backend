@@ -11,7 +11,9 @@ urlpatterns = [
     # ===============================
     path('periods/list/', PayrollPeriodList.as_view(), name='payroll-period-list'),
     path('periods/add/', PayrollPeriodAdd.as_view(), name='payroll-period-add'),
-    
+    path('dashboard/summary/', PayrollDashboardSummary.as_view(), name='payroll-dashboard-summary'),
+    path('dashboard/charts/', PayrollDashboardCharts.as_view(), name='payroll-dashboard-charts'),
+
     # ===============================
     # PAYROLL GENERATION & MANAGEMENT
     # ===============================

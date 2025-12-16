@@ -10,14 +10,15 @@ from django.utils import timezone
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 
-from payroll.models.payroll_models import PayrollPeriod, Payroll, PerformanceMetric
+from payroll.models.payroll_models import *
 from payroll.models.benefits_models import TaxConfiguration
 from payroll.serializers.payroll_serializer import (
     PayrollPeriodSerializer, PayrollSerializer, PerformanceMetricSerializer, PayrollSummarySerializer
 )
 from hr_management.models.hr_management_models import Employee
 from time_tracking.models.time_tracking_models import TimeEntry
-
+from hr_management.models.hr_management_models import Employee
+from payroll.models import Payroll, PayrollPeriod
 
 class PayrollPeriodList(APIView):
     permission_classes = [IsAuthenticated]
@@ -516,3 +517,107 @@ class PerformanceMetricAdd(APIView):
                 'message': 'Error adding performance metric',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
+class PayrollDashboardSummary(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            # 1. Active employees (soft delete)
+            total_employees = Employee.objects.filter(
+                deleted_at__isnull=True
+            ).count()
+
+            # 2. Monthly payroll (already calculated)
+            monthly_payroll = Payroll.objects.filter(
+                deleted_at__isnull=True
+            ).aggregate(
+                total=Sum('net_salary')
+            )['total'] or 0
+
+            # 3. Pending payroll approvals
+            pending_approvals = Payroll.objects.filter(
+                status='PENDING',
+                deleted_at__isnull=True
+            ).count()
+
+            # 4. Next payroll period
+            next_period = PayrollPeriod.objects.filter(
+                start_date__gte=timezone.now().date()
+            ).order_by('start_date').first()
+
+            return Response({
+                'status': True,
+                'records': {
+                    'totalEmployees': total_employees,
+                    'monthlyPayroll': monthly_payroll,
+                    'pendingApprovals': pending_approvals,
+                    'nextPayRun': next_period.name if next_period else '-'
+                }
+            }, status=200)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Failed to load dashboard summary',
+                'error': str(e)
+            }, status=400)
+
+class PayrollDashboardCharts(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            # ===== Payroll Trend (Last 6 periods) =====
+            trend_qs = (
+                Payroll.objects
+                .filter(deleted_at__isnull=True)
+                .values('payroll_period__period_name')
+                .annotate(total=Sum('net_salary'))
+                .order_by('-payroll_period__start_date')[:6]
+            )
+
+            trend_labels = []
+            trend_data = []
+
+            for row in reversed(trend_qs):
+                trend_labels.append(row['payroll_period__period_name'])
+                trend_data.append(row['total'] or 0)
+
+            # ===== Department Cost =====
+            dept_qs = (
+                Payroll.objects
+                .filter(deleted_at__isnull=True)
+                .values('employee__department__name')
+                .annotate(total=Sum('net_salary'))
+            )
+
+            dept_labels = []
+            dept_data = []
+
+            for row in dept_qs:
+                dept_labels.append(row['employee__department__name'] or 'Unknown')
+                dept_data.append(row['total'] or 0)
+
+            return Response({
+                'status': True,
+                'records': {
+                    'payrollTrend': {
+                        'labels': trend_labels,
+                        'data': trend_data
+                    },
+                    'departmentCost': {
+                        'labels': dept_labels,
+                        'data': dept_data
+                    }
+                }
+            }, status=200)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Failed to load chart data',
+                'error': str(e)
+            }, status=400)
+
+
