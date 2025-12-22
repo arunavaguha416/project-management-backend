@@ -1,25 +1,13 @@
 # payroll/models/__init__.py
 
 # Import all payroll-related models
-from .payroll_models import (
-    PayrollPeriod,
-    Payroll,
-    PerformanceMetric
-)
+from .payroll_models import *
 
 # Import all expense-related models
-from .expense_models import (
-    ExpenseCategory,
-    ExpenseClaim,
-    ExpenseApprovalWorkflow
-)
+from .expense_models import *
 
 # Import all benefits-related models
-from .benefits_models import (
-    BenefitPlan,
-    BenefitEnrollment,
-    TaxConfiguration
-)
+from .benefits_models import *
 
 # Make all models available when importing from models package
 __all__ = [

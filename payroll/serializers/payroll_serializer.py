@@ -1,6 +1,6 @@
 # payroll/serializers/payroll_serializer.py
 from rest_framework import serializers
-from payroll.models.payroll_models import PayrollPeriod, Payroll, PerformanceMetric
+from payroll.models.payroll_models import *
 from hr_management.models.hr_management_models import Employee
 from time_tracking.models.time_tracking_models import TimeEntry
 from decimal import Decimal
@@ -16,6 +16,43 @@ class PayrollPeriodSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'deleted_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class PayRunSerializer(serializers.ModelSerializer):
+    payroll_period_name = serializers.CharField(
+        source='payroll_period.period_name', read_only=True
+    )
+
+    class Meta:
+        model = PayRun
+        fields = [
+            'id',
+            'payroll_period',
+            'payroll_period_name',
+            'status',
+            'total_employees',
+            'total_gross_salary',
+            'total_deductions',
+            'total_net_salary',
+            'created_at'
+        ]
+
+class PayRunEmployeeSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.user.get_full_name')
+    status = serializers.CharField()
+
+    class Meta:
+        model = Payroll
+        fields = [
+            'id',
+            'employee_name',
+            'basic_salary',
+            'total_allowances',
+            'total_deductions',
+            'net_salary',
+            'status'
+        ]
+
 
 class PayrollSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.user.name', read_only=True)
@@ -86,28 +123,6 @@ class PayrollSerializer(serializers.ModelSerializer):
             return round((time_entries / total_working_days) * 100, 2)
         except:
             return 0.0
-
-class PerformanceMetricSerializer(serializers.ModelSerializer):
-    employee_name = serializers.CharField(source='employee.user.name', read_only=True)
-    employee_email = serializers.CharField(source='employee.user.email', read_only=True)
-    period_name = serializers.CharField(source='period.period_name', read_only=True)
-    
-    created_at = serializers.ReadOnlyField()
-    updated_at = serializers.ReadOnlyField()
-    
-    class Meta:
-        model = PerformanceMetric
-        fields = [
-            'id', 'employee', 'employee_name', 'employee_email', 'period', 'period_name',
-            'project_completion_rate', 'quality_score', 'attendance_percentage',
-            'client_feedback_score', 'team_collaboration_score', 'innovation_score',
-            'overall_score', 'performance_grade', 'bonus_multiplier',
-            'created_at', 'updated_at', 'deleted_at'
-        ]
-        read_only_fields = [
-            'id', 'overall_score', 'performance_grade', 'bonus_multiplier',
-            'created_at', 'updated_at'
-        ]
 
 class PayrollSummarySerializer(serializers.Serializer):
     total_employees = serializers.IntegerField()

@@ -10,6 +10,8 @@ import uuid
 from decimal import Decimal
 from datetime import date
 
+
+
 class PayrollPeriod(SoftDeletionModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
     start_date = models.DateField()
@@ -29,47 +31,85 @@ class PayrollPeriod(SoftDeletionModel):
         verbose_name = _('PayrollPeriod')
         verbose_name_plural = _('PayrollPeriods')
 
-class Payroll(SoftDeletionModel):
+
+class PayRun(models.Model):
+    STATUS_CHOICES = (
+        ('DRAFT', 'Draft'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('FINALIZED', 'Finalized'),
+        ('POSTED', 'Posted'),
+    )
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
-    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
-    payroll_period = models.ForeignKey(PayrollPeriod, on_delete=models.CASCADE)
+    payroll_period = models.OneToOneField(
+        PayrollPeriod,
+        on_delete=models.CASCADE,
+        related_name='pay_run'
+    )
 
-    # Salary Components
-    basic_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    overtime_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
-    overtime_rate = models.DecimalField(max_digits=8, decimal_places=2, default=0)
-    overtime_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='DRAFT'
+    )
 
-    # Allowances
-    house_rent_allowance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    transport_allowance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    medical_allowance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    other_allowances = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='payruns_created'
+    )
 
-    # Bonuses
-    performance_bonus = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    attendance_bonus = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    project_bonus = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    finalized_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payruns_finalized'
+    )
+
+    finalized_at = models.DateTimeField(null=True, blank=True)
+
+    total_employees = models.PositiveIntegerField(default=0)
+    total_gross_salary = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    total_deductions = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    total_net_salary = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('payrun')
+        
+class Payroll(SoftDeletionModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, null=True, blank=True)
+    pay_run = models.ForeignKey(PayRun, on_delete=models.CASCADE, null=True, blank=True)
+    payroll_period = models.ForeignKey(PayrollPeriod, on_delete=models.CASCADE, null=True, blank=True)
+
+    # Earnings
+    basic_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    house_rent_allowance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    transport_allowance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    other_allowances = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     # Deductions
-    provident_fund = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    professional_tax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    income_tax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    health_insurance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    other_deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    provident_fund = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    professional_tax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    income_tax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
-    # Calculated Fields - These will be populated manually or via external services
-    gross_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    total_deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    net_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Totals
+    gross_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_deductions = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    net_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
-    # Status and Processing
-    status = models.CharField(max_length=20, choices=[
-        ('Draft', 'Draft'),
-        ('Calculated', 'Calculated'),
-        ('Approved', 'Approved'),
-        ('Paid', 'Paid')
-    ], default='Draft')
+    status = models.CharField(
+        max_length=20,
+        choices=[('CALCULATED', 'Calculated'), ('APPROVED', 'Approved')],
+        default='CALCULATED'
+    )
+
     processed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_payrolls')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -84,39 +124,3 @@ class Payroll(SoftDeletionModel):
     # REMOVED: calculate_payroll method
     # REMOVED: custom save method that called calculate_payroll
 
-class PerformanceMetric(SoftDeletionModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
-    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
-    period = models.ForeignKey(PayrollPeriod, on_delete=models.CASCADE)
-
-    # Performance Metrics
-    project_completion_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # %
-    quality_score = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # out of 100
-    attendance_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # %
-    client_feedback_score = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # out of 10
-    team_collaboration_score = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # out of 10
-    innovation_score = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # out of 10
-
-    # Overall Performance - These will be populated manually or via external services
-    overall_score = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # calculated
-    performance_grade = models.CharField(max_length=2, choices=[
-        ('A+', 'Exceptional'),
-        ('A', 'Outstanding'),
-        ('B+', 'Above Average'),
-        ('B', 'Average'),
-        ('C', 'Below Average'),
-        ('D', 'Poor')
-    ], blank=True)
-    bonus_multiplier = models.DecimalField(max_digits=3, decimal_places=2, default=1.0)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        verbose_name = _('PerformanceMetric')
-        verbose_name_plural = _('PerformanceMetrics')
-        unique_together = ('employee', 'period')
-
-    # REMOVED: calculate_overall_score method
-    # REMOVED: custom save method that called calculate_overall_score

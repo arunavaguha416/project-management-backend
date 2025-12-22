@@ -26,11 +26,7 @@ urlpatterns = [
     # ===============================
     path('stats/', PayrollStats.as_view(), name='payroll-stats'),
     
-    # ===============================
-    # PERFORMANCE METRICS
-    # ===============================
-    path('performance-metrics/list/', PerformanceMetricList.as_view(), name='performance-metric-list'),
-    path('performance-metrics/add/', PerformanceMetricAdd.as_view(), name='performance-metric-add'),
+
     
     # ===============================
     # EXPENSE MANAGEMENT
@@ -90,4 +86,13 @@ urlpatterns = [
     
     # Tax Calculations
     path('tax-calculator/', TaxCalculator.as_view(), name='tax-calculator'),
+
+    # Pay Runs
+    path('pay-runs/list/', PayRunListView.as_view()),
+    path('pay-runs/create/', PayRunCreateView.as_view()),
+    path('pay-runs/generate/', PayRunGeneratePayrollView.as_view()),
+    path('pay-runs/employees/', PayRunEmployeeListView.as_view()),
+    path('pay-runs/finalize/', PayRunFinalizeView.as_view()),
+    path('pay-runs/summary/', PayRunSummaryView.as_view()),
+    path('pay-runs/lock-status/', PayRunLockCheckView.as_view()),
 ]

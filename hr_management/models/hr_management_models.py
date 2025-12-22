@@ -18,6 +18,10 @@ class Employee(SoftDeletionModel):
     date_of_joining = models.DateField(null=True, blank=True)
     designation = models.CharField(max_length=100, null=True)
     phone = models.CharField(max_length=15, blank=True)
+    tax_regime = models.CharField(max_length=10,choices=[('OLD', 'Old'), ('NEW', 'New')],default='NEW')
+    # salary_structure = models.ForeignKey(SalaryStructure,on_delete=models.SET_NULL,null=True, blank=True)
+
+    is_payroll_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)

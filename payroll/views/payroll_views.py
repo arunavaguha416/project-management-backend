@@ -12,59 +12,34 @@ from decimal import Decimal
 
 from payroll.models.payroll_models import *
 from payroll.models.benefits_models import TaxConfiguration
-from payroll.serializers.payroll_serializer import (
-    PayrollPeriodSerializer, PayrollSerializer, PerformanceMetricSerializer, PayrollSummarySerializer
-)
+from payroll.serializers.payroll_serializer import *
 from hr_management.models.hr_management_models import Employee
 from time_tracking.models.time_tracking_models import TimeEntry
 from hr_management.models.hr_management_models import Employee
 from payroll.models import Payroll, PayrollPeriod
+from payroll.services.payroll_calculator import calculate_employee_payroll
+from django.db import transaction
 
 class PayrollPeriodList(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
-    def post(self, request):
+    def get(self, request):
         try:
-            search_data = request.data
-            page = int(search_data.get('page', 1))
-            page_size = int(search_data.get('page_size', 10))
-            status_filter = search_data.get('status', '')
+            periods = PayrollPeriod.objects.all().order_by('-start_date')
+            serializer = PayrollPeriodSerializer(periods, many=True)
 
-            query = Q()
-            if status_filter:
-                query &= Q(status=status_filter)
-
-            periods = PayrollPeriod.objects.filter(query).order_by('-start_date')
-
-            if periods.exists():
-                paginator = Paginator(periods, page_size)
-                try:
-                    paginated_periods = paginator.page(page)
-                except:
-                    paginated_periods = paginator.page(1)
-
-                serializer = PayrollPeriodSerializer(paginated_periods, many=True)
-                return Response({
-                    'status': True,
-                    'count': paginator.count,
-                    'num_pages': paginator.num_pages,
-                    'current_page': page,
-                    'records': serializer.data
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'No payroll periods found',
-                    'count': 0,
-                    'records': []
-                }, status=status.HTTP_200_OK)
+            return Response({
+                'status': True,
+                'data': serializer.data
+            })
 
         except Exception as e:
             return Response({
                 'status': False,
-                'message': 'Error fetching payroll periods',
+                'message': 'Failed to load payroll periods',
                 'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            }, status=500)
+
 
 
 class PayrollPeriodAdd(APIView):
@@ -96,472 +71,256 @@ class PayrollPeriodAdd(APIView):
 
 
 class PayrollGenerate(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         try:
-            period_id = request.data.get('period_id')
-            employee_ids = request.data.get('employee_ids', [])
+            pay_run_id = request.data.get('pay_run_id')
+            if not pay_run_id:
+                return Response({'status': False, 'message': 'pay_run_id is required'}, status=400)
 
-            period = PayrollPeriod.objects.filter(id=period_id).first()
-            if not period:
-                return Response({
-                    'status': False,
-                    'message': 'Payroll period not found'
-                }, status=status.HTTP_404_NOT_FOUND)
+            payrun = PayRun.objects.filter(id=pay_run_id).first()
+            if not payrun:
+                return Response({'status': False, 'message': 'Invalid Pay Run'}, status=404)
 
-            # Get employees to process
-            if employee_ids:
-                employees = Employee.objects.filter(id__in=employee_ids)
-            else:
-                employees = Employee.objects.filter(user__is_active=True)
+            if payrun.status != 'DRAFT':
+                return Response({'status': False, 'message': 'Payroll already generated'}, status=400)
 
-            generated_count = 0
-            errors = []
+            current_employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
 
-            for employee in employees:
-                try:
-                    # Check if payroll already exists
-                    existing_payroll = Payroll.objects.filter(
-                        employee=employee,
-                        payroll_period=period
-                    ).first()
+            if not current_employee or not current_employee.company:
+                return Response({'status': False, 'message': 'Unauthorized'}, status=403)
 
-                    if existing_payroll:
-                        continue
+            employees = Employee.objects.filter(
+                company=current_employee.company,
+                deleted_at__isnull=True
+            )
 
-                    # Calculate overtime from time tracking
-                    overtime_hours = self.calculate_overtime_hours(employee, period)
+            created_count = 0
 
-                    # Get performance metrics
-                    performance_metric = PerformanceMetric.objects.filter(
-                        employee=employee,
-                        period=period
-                    ).first()
-
-                    # Calculate bonuses based on performance
-                    performance_bonus = 0
-                    attendance_bonus = 0
-
-                    if performance_metric:
-                        base_bonus = employee.basic_salary * Decimal('0.1') if employee.basic_salary else 0  # 10% base bonus
-                        performance_bonus = base_bonus * performance_metric.bonus_multiplier
-
-                        # Attendance bonus if > 95% attendance
-                        if performance_metric.attendance_percentage > 95:
-                            attendance_bonus = employee.basic_salary * Decimal('0.05') if employee.basic_salary else 0
-
-                    # Calculate tax deductions
-                    tax_deductions = self.calculate_tax_deductions(employee)
-
-                    # Create payroll record
-                    payroll = Payroll.objects.create(
-                        employee=employee,
-                        payroll_period=period,
-                        basic_salary=employee.basic_salary or 0,
-                        overtime_hours=overtime_hours,
-                        house_rent_allowance=employee.basic_salary * Decimal('0.4') if employee.basic_salary else 0,
-                        transport_allowance=Decimal('2000'),
-                        medical_allowance=Decimal('1500'),
-                        performance_bonus=performance_bonus,
-                        attendance_bonus=attendance_bonus,
-                        provident_fund=employee.basic_salary * Decimal('0.12') if employee.basic_salary else 0,
-                        professional_tax=tax_deductions.get('professional_tax', 0),
-                        income_tax=tax_deductions.get('income_tax', 0),
-                        processed_by=request.user,
-                        status='Calculated'
+            with transaction.atomic():
+                for emp in employees:
+                    payroll, created = Payroll.objects.get_or_create(
+                        employee=emp,
+                        payroll_period=payrun.payroll_period,
+                        defaults={'pay_run': payrun}
                     )
 
-                    generated_count += 1
+                    values = calculate_employee_payroll(emp)
+                    for field, value in values.items():
+                        setattr(payroll, field, value)
 
-                except Exception as e:
-                    errors.append(f"Error processing {employee.user.name}: {str(e)}")
+                    payroll.status = 'Calculated'
+                    payroll.processed_by = request.user
+                    payroll.save()
+
+                    if created:
+                        created_count += 1
+
+                payrun.total_employees = employees.count()
+                payrun.status = 'IN_PROGRESS'
+                payrun.save(update_fields=['total_employees', 'status'])
 
             return Response({
                 'status': True,
-                'message': f'Payroll generated for {generated_count} employees',
-                'records': {
-                    'generated_count': generated_count,
-                    'errors': errors
-                }
-            }, status=status.HTTP_200_OK)
+                'message': 'Payroll generated successfully',
+                'records': {'employees_processed': created_count}
+            })
 
         except Exception as e:
             return Response({
                 'status': False,
-                'message': 'Error generating payroll',
+                'message': 'Failed to generate payroll',
                 'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            }, status=500)
 
-    def calculate_overtime_hours(self, employee, period):
-        """Calculate overtime hours from time tracking"""
-        try:
-            time_entries = TimeEntry.objects.filter(
-                user=employee.user,
-                date__range=[period.start_date, period.end_date],
-                duration__isnull=False
-            )
-
-            total_hours = sum([
-                entry.duration.total_seconds() / 3600
-                for entry in time_entries
-            ])
-
-            # Standard working hours per month (22 working days * 8 hours)
-            standard_hours = 176
-            return max(0, total_hours - standard_hours)
-
-        except:
-            return 0
-
-    def calculate_tax_deductions(self, employee):
-        """Calculate tax deductions based on tax configuration"""
-        try:
-            tax_config = TaxConfiguration.objects.filter(
-                is_active=True,
-                country='India'
-            ).first()
-
-            if not tax_config:
-                return {'professional_tax': 0, 'income_tax': 0}
-
-            annual_salary = (employee.basic_salary or 0) * 12
-
-            # Professional Tax
-            professional_tax = (employee.basic_salary or 0) * tax_config.professional_tax_rate / 100
-
-            # Income Tax (simplified calculation)
-            income_tax = 0
-            if annual_salary > 500000:  # Above 5 lakhs
-                taxable_income = annual_salary - tax_config.standard_deduction
-                for slab in tax_config.tax_slabs:
-                    if taxable_income > slab['min']:
-                        taxable_amount = min(taxable_income, slab['max']) - slab['min']
-                        income_tax += taxable_amount * slab['rate'] / 100
-
-                income_tax = income_tax / 12  # Monthly tax
-
-            return {
-                'professional_tax': round(professional_tax, 2),
-                'income_tax': round(income_tax, 2)
-            }
-
-        except:
-            return {'professional_tax': 0, 'income_tax': 0}
 
 
 class PayrollList(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         try:
-            search_data = request.data
-            page = int(search_data.get('page', 1))
-            page_size = int(search_data.get('page_size', 10))
-            period_id = search_data.get('period_id')
-            employee_id = search_data.get('employee_id')
-            status_filter = search_data.get('status', '')
+            current_employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
 
-            # Base query - HR and ADMIN can see all, others see only their own
-            if request.user.role in ['HR', 'ADMIN','MANAGER']:
-                query = Q()
-            else:
-                # Employees see their own payroll
-                employee = Employee.objects.filter(user=request.user).first()
-                if not employee:
-                    return Response({
-                        'status': False,
-                        'message': 'Employee record not found',
-                        'records': []
-                    }, status=status.HTTP_200_OK)
-                query = Q(employee=employee)
+            if not current_employee or not current_employee.company:
+                return Response({'status': False, 'message': 'Unauthorized'}, status=403)
 
-            # Apply filters
-            if period_id:
-                query &= Q(payroll_period_id=period_id)
-            if employee_id and request.user.role in ['HR', 'ADMIN']:
-                query &= Q(employee_id=employee_id)
-            if status_filter:
-                query &= Q(status=status_filter)
+            payrolls = Payroll.objects.filter(
+                employee__company=current_employee.company
+            ).select_related('employee', 'payroll_period', 'pay_run')
 
-            payrolls = Payroll.objects.filter(query).select_related(
-                'employee__user', 'payroll_period', 'processed_by', 'approved_by'
-            ).order_by('-created_at')
+            serializer = PayrollSerializer(payrolls, many=True)
 
-            if payrolls.exists():
-                paginator = Paginator(payrolls, page_size)
-                try:
-                    paginated_payrolls = paginator.page(page)
-                except:
-                    paginated_payrolls = paginator.page(1)
-
-                serializer = PayrollSerializer(paginated_payrolls, many=True)
-                return Response({
-                    'status': True,
-                    'count': paginator.count,
-                    'num_pages': paginator.num_pages,
-                    'current_page': page,
-                    'records': serializer.data
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'No payroll records found',
-                    'count': 0,
-                    'records': []
-                }, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'Error fetching payroll records',
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-
-class PayrollApprove(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:
-            # Only HR and ADMIN can approve payroll
-            if request.user.role not in ['HR', 'ADMIN']:
-                return Response({
-                    'status': False,
-                    'message': 'Insufficient permissions'
-                }, status=status.HTTP_403_FORBIDDEN)
-
-            payroll_ids = request.data.get('payroll_ids', [])
-            action = request.data.get('action', 'approve')  # approve/reject
-
-            if not payroll_ids:
-                return Response({
-                    'status': False,
-                    'message': 'No payroll IDs provided'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            payrolls = Payroll.objects.filter(id__in=payroll_ids)
-            updated_count = 0
-
-            for payroll in payrolls:
-                if action == 'approve':
-                    payroll.status = 'Approved'
-                    payroll.approved_by = request.user
-                elif action == 'reject':
-                    payroll.status = 'Draft'
-                    payroll.approved_by = None
-
-                payroll.save()
-                updated_count += 1
-
-            return Response({
-                'status': True,
-                'message': f'{updated_count} payroll records {action}d successfully'
-            }, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': f'Error {action}ing payroll records',
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-
-class PayrollStats(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:
-            period_id = request.data.get('period_id')
-            if not period_id:
-                return Response({
-                    'status': False,
-                    'message': 'Period ID is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # Get payroll statistics for the period
-            payrolls = Payroll.objects.filter(payroll_period_id=period_id)
-
-            if not payrolls.exists():
-                return Response({
-                    'status': False,
-                    'message': 'No payroll data found for this period',
-                    'records': {}
-                }, status=status.HTTP_200_OK)
-
-            # Calculate statistics
-            stats = payrolls.aggregate(
-                total_employees=Count('id'),
-                total_gross_salary=Sum('gross_salary'),
-                total_deductions=Sum('total_deductions'),
-                total_net_salary=Sum('net_salary'),
-                total_overtime_amount=Sum('overtime_amount'),
-                total_bonuses=Sum('performance_bonus') + Sum('attendance_bonus') + Sum('project_bonus')
-            )
-
-            # Handle None values
-            for key, value in stats.items():
-                if value is None:
-                    stats[key] = 0
-
-            # Add default average_attendance to satisfy serializer
-            stats['average_attendance'] = 0
-
-            serializer = PayrollSummarySerializer(stats)
             return Response({
                 'status': True,
                 'records': serializer.data
-            }, status=status.HTTP_200_OK)
+            })
 
         except Exception as e:
             return Response({
                 'status': False,
-                'message': 'Error fetching payroll statistics',
+                'message': 'Failed to load payroll list',
                 'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            }, status=500)
 
 
 
-
-class PerformanceMetricList(APIView):
-    permission_classes = [IsAuthenticated]
+class PayrollApprove(APIView):
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         try:
-            search_data = request.data
-            page = int(search_data.get('page', 1))
-            page_size = int(search_data.get('page_size', 10))
-            period_id = search_data.get('period_id')
+            payroll_id = request.data.get('payroll_id')
+            allowances = request.data.get('allowances', {})
 
-            # Base query - HR and ADMIN can see all, others see only their own
-            if request.user.role in ['HR', 'ADMIN']:
-                query = Q()
-            else:
-                employee = Employee.objects.filter(user=request.user).first()
-                if not employee:
-                    return Response({
-                        'status': False,
-                        'message': 'Employee record not found',
-                        'records': []
-                    }, status=status.HTTP_200_OK)
-                query = Q(employee=employee)
+            payroll = Payroll.objects.select_related(
+                'employee', 'pay_run'
+            ).filter(id=payroll_id).first()
 
-            if period_id:
-                query &= Q(period_id=period_id)
+            if not payroll:
+                return Response({'status': False, 'message': 'Payroll not found'}, status=404)
 
-            metrics = PerformanceMetric.objects.filter(query).select_related(
-                'employee__user', 'period'
-            ).order_by('-created_at')
-
-            if metrics.exists():
-                paginator = Paginator(metrics, page_size)
-                try:
-                    paginated_metrics = paginator.page(page)
-                except:
-                    paginated_metrics = paginator.page(1)
-
-                serializer = PerformanceMetricSerializer(paginated_metrics, many=True)
-                return Response({
-                    'status': True,
-                    'count': paginator.count,
-                    'num_pages': paginator.num_pages,
-                    'current_page': page,
-                    'records': serializer.data
-                }, status=status.HTTP_200_OK)
-            else:
+            if payroll.pay_run.status != 'IN_PROGRESS':
                 return Response({
                     'status': False,
-                    'message': 'No performance metrics found',
-                    'count': 0,
-                    'records': []
-                }, status=status.HTTP_200_OK)
+                    'message': 'Payroll is locked'
+                }, status=400)
+
+            # Update editable allowances
+            payroll.house_rent_allowance = allowances.get(
+                'house_rent_allowance', payroll.house_rent_allowance
+            )
+            payroll.transport_allowance = allowances.get(
+                'transport_allowance', payroll.transport_allowance
+            )
+            payroll.other_allowances = allowances.get(
+                'bonus', payroll.other_allowances
+            )
+
+            # Recalculate totals
+            payroll.gross_salary = (
+                payroll.basic_salary +
+                payroll.house_rent_allowance +
+                payroll.transport_allowance +
+                payroll.other_allowances
+            )
+
+            payroll.total_deductions = (
+                payroll.provident_fund +
+                payroll.professional_tax +
+                payroll.income_tax
+            )
+
+            payroll.net_salary = payroll.gross_salary - payroll.total_deductions
+
+            payroll.save()
+
+            return Response({
+                'status': True,
+                'message': 'Payroll updated successfully'
+            })
 
         except Exception as e:
             return Response({
                 'status': False,
-                'message': 'Error fetching performance metrics',
+                'message': 'Failed to update payroll',
                 'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            }, status=500)
 
 
-class PerformanceMetricAdd(APIView):
-    permission_classes = [IsAuthenticated]
+
+
+class PayrollStats(APIView):
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         try:
-            # Only HR and ADMIN can add/update performance metrics
-            if request.user.role not in ['HR', 'ADMIN']:
-                return Response({
-                    'status': False,
-                    'message': 'Insufficient permissions'
-                }, status=status.HTTP_403_FORBIDDEN)
+            current_employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
 
-            serializer = PerformanceMetricSerializer(data=request.data)
-            if serializer.is_valid():
-                metric = serializer.save()
-                return Response({
-                    'status': True,
-                    'message': 'Performance metric added successfully',
-                    'records': PerformanceMetricSerializer(metric).data
-                }, status=status.HTTP_200_OK)
+            if not current_employee or not current_employee.company:
+                return Response({'status': False, 'message': 'Unauthorized'}, status=403)
+
+            stats = Payroll.objects.filter(
+                employee__company=current_employee.company
+            ).aggregate(
+                total_gross=models.Sum('gross_salary'),
+                total_deductions=models.Sum('total_deductions'),
+                total_net=models.Sum('net_salary')
+            )
 
             return Response({
-                'status': False,
-                'message': 'Invalid data',
-                'errors': serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
+                'status': True,
+                'records': stats
+            })
 
         except Exception as e:
             return Response({
                 'status': False,
-                'message': 'Error adding performance metric',
+                'message': 'Failed to load payroll stats',
                 'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            }, status=500)
+
+
+
 
 class PayrollDashboardSummary(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         try:
-            # 1. Active employees (soft delete)
+            current_employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
+
+            if not current_employee or not current_employee.company:
+                return Response(
+                    {'status': False, 'message': 'Unauthorized'},
+                    status=403
+                )
+
+            company = current_employee.company
+
             total_employees = Employee.objects.filter(
+                company=company,
                 deleted_at__isnull=True
             ).count()
 
-            # 2. Monthly payroll (already calculated)
-            monthly_payroll = Payroll.objects.filter(
-                deleted_at__isnull=True
+            total_payroll = Payroll.objects.filter(
+                employee__company=company
             ).aggregate(
-                total=Sum('net_salary')
+                total=models.Sum('net_salary')
             )['total'] or 0
-
-            # 3. Pending payroll approvals
-            pending_approvals = Payroll.objects.filter(
-                status='PENDING',
-                deleted_at__isnull=True
-            ).count()
-
-            # 4. Next payroll period
-            next_period = PayrollPeriod.objects.filter(
-                start_date__gte=timezone.now().date()
-            ).order_by('start_date').first()
 
             return Response({
                 'status': True,
                 'records': {
-                    'totalEmployees': total_employees,
-                    'monthlyPayroll': monthly_payroll,
-                    'pendingApprovals': pending_approvals,
-                    'nextPayRun': next_period.name if next_period else '-'
+                    'total_employees': total_employees,
+                    'monthly_payroll': total_payroll,
+                    'pending_approvals': 0,
+                    'next_pay_run': None
                 }
-            }, status=200)
+            })
 
         except Exception as e:
             return Response({
                 'status': False,
                 'message': 'Failed to load dashboard summary',
                 'error': str(e)
-            }, status=400)
+            }, status=500)
+
+
+
 
 class PayrollDashboardCharts(APIView):
     permission_classes = (IsAuthenticated,)
@@ -619,5 +378,362 @@ class PayrollDashboardCharts(APIView):
                 'message': 'Failed to load chart data',
                 'error': str(e)
             }, status=400)
+
+
+class PayRunListView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        try:
+            payruns = PayRun.objects.all()
+            serializer = PayRunSerializer(payruns, many=True)
+
+            return Response({
+                'status': True,
+                'data': serializer.data
+            })
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Failed to load pay runs',
+                'error': str(e)
+            }, status=500)
+
+
+
+class PayRunCreateView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            period_id = request.data.get('payroll_period')
+
+            if not period_id:
+                return Response({
+                    'status': False,
+                    'message': 'payroll_period is required'
+                }, status=400)
+
+            if PayRun.objects.filter(payroll_period_id=period_id).exists():
+                return Response({
+                    'status': False,
+                    'message': 'Pay Run already exists for this period'
+                }, status=400)
+
+            payrun = PayRun.objects.create(
+                payroll_period_id=period_id,
+                created_by=request.user
+            )
+
+            return Response({
+                'status': True,
+                'data': PayRunSerializer(payrun).data
+            })
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Failed to create pay run',
+                'error': str(e)
+            }, status=500)
+
+
+
+class PayRunGeneratePayrollView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            pay_run_id = request.data.get('pay_run_id')
+
+            if not pay_run_id:
+                return Response({
+                    'status': False,
+                    'message': 'pay_run_id is required'
+                }, status=400)
+
+            payrun = PayRun.objects.filter(id=pay_run_id).first()
+            if not payrun:
+                return Response({
+                    'status': False,
+                    'message': 'Invalid Pay Run'
+                }, status=404)
+
+            if payrun.status != 'DRAFT':
+                return Response({
+                    'status': False,
+                    'message': 'Payroll already generated'
+                }, status=400)
+
+            # 🔹 Identify HR employee & company
+            current_employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
+
+            if not current_employee or not current_employee.company:
+                return Response({
+                    'status': False,
+                    'message': 'Unauthorized'
+                }, status=403)
+
+            employees = Employee.objects.filter(
+                company=current_employee.company,
+                deleted_at__isnull=True
+            )
+
+            created_count = 0
+
+            with transaction.atomic():
+                for emp in employees:
+                    payroll, created = Payroll.objects.get_or_create(
+                        employee=emp,
+                        payroll_period=payrun.payroll_period,
+                        defaults={
+                            'pay_run': payrun,
+                            'processed_by': request.user
+                        }
+                    )
+
+                    # ⚠️ Prevent duplicates
+                    if not created:
+                        continue
+
+                    values = calculate_employee_payroll(emp)
+                    for field, value in values.items():
+                        setattr(payroll, field, value)
+
+                    payroll.status = 'CALCULATED'
+                    payroll.save()
+                    created_count += 1
+
+                payrun.total_employees = created_count
+                payrun.status = 'IN_PROGRESS'
+                payrun.save(update_fields=['total_employees', 'status'])
+
+            return Response({
+                'status': True,
+                'message': 'Payroll generated successfully',
+                'records': {
+                    'employees_processed': created_count
+                }
+            })
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Failed to generate payroll',
+                'error': str(e)
+            }, status=500)
+
+
+
+class PayRunEmployeeListView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            pay_run_id = request.data.get('pay_run_id')
+            if not pay_run_id:
+                return Response({'status': False, 'message': 'pay_run_id is required'}, status=400)
+
+            payrun = PayRun.objects.filter(id=pay_run_id).first()
+            if not payrun:
+                return Response({'status': False, 'message': 'Invalid Pay Run'}, status=404)
+
+            current_employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
+
+            if not current_employee or not current_employee.company:
+                return Response({'status': False, 'message': 'Unauthorized'}, status=403)
+
+            payrolls = Payroll.objects.select_related('employee').filter(
+                pay_run=payrun,
+                employee__company=current_employee.company
+            )
+
+            serializer = PayrollSerializer(payrolls, many=True)
+
+            return Response({
+                'status': True,
+                'records': serializer.data
+            })
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Failed to fetch payroll employees',
+                'error': str(e)
+            }, status=500)
+
+
+class PayRunFinalizeView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            pay_run_id = request.data.get('pay_run_id')
+
+            if not pay_run_id:
+                return Response({
+                    'status': False,
+                    'message': 'pay_run_id is required'
+                }, status=400)
+
+            payrun = PayRun.objects.filter(id=pay_run_id).first()
+            if not payrun or payrun.status != 'IN_PROGRESS':
+                return Response({
+                    'status': False,
+                    'message': 'Pay Run not ready to finalize'
+                }, status=400)
+
+            payrolls = Payroll.objects.filter(pay_run=payrun)
+
+            payrun.total_gross_salary = sum(p.gross_salary for p in payrolls)
+            payrun.total_deductions = sum(p.total_deductions for p in payrolls)
+            payrun.total_net_salary = sum(p.net_salary for p in payrolls)
+
+            payrun.status = 'FINALIZED'
+            payrun.finalized_by = request.user
+            payrun.finalized_at = timezone.now()
+            payrun.save()
+
+            payrolls.update(
+                status='Approved',
+                approved_by=request.user
+            )
+
+
+            return Response({
+                'status': True,
+                'message': 'Pay Run finalized successfully'
+            })
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Failed to finalize pay run',
+                'error': str(e)
+            }, status=500)
+
+
+class PayRunSummaryView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            pay_run_id = request.data.get('pay_run_id')
+
+            if not pay_run_id:
+                return Response({
+                    'status': False,
+                    'message': 'pay_run_id is required'
+                }, status=400)
+
+            # 1️⃣ Logged-in employee
+            current_employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
+
+            if not current_employee or not current_employee.company:
+                return Response({
+                    'status': False,
+                    'message': 'Unauthorized'
+                }, status=403)
+
+            company = current_employee.company
+
+            # 2️⃣ Fetch PayRun (no company join here)
+            pay_run = PayRun.objects.filter(id=pay_run_id).select_related(
+                'payroll_period'
+            ).first()
+
+            if not pay_run:
+                return Response({
+                    'status': False,
+                    'message': 'Pay Run not found'
+                }, status=404)
+
+            # 3️⃣ Payroll rows scoped by company
+            payroll_qs = Payroll.objects.filter(
+                pay_run=pay_run,
+                employee__company=company
+            )
+
+            # 4️⃣ Aggregation
+            totals = payroll_qs.aggregate(
+                total_gross_salary=Sum('gross_salary'),
+                total_deductions=Sum('total_deductions'),
+                total_net_salary=Sum('net_salary')
+            )
+
+            total_employees = payroll_qs.count()
+
+            response_data = {
+                'id': str(pay_run.id),
+                'payroll_period_id': str(pay_run.payroll_period.id),
+                'payroll_period_name': pay_run.payroll_period.period_name,
+                'status': pay_run.status,
+                'total_employees': total_employees,
+                'total_gross_salary': totals['total_gross_salary'] or Decimal('0.00'),
+                'total_deductions': totals['total_deductions'] or Decimal('0.00'),
+                'total_net_salary': totals['total_net_salary'] or Decimal('0.00'),
+                'created_at': pay_run.created_at,
+                'finalized_at': pay_run.finalized_at
+            }
+
+            return Response({
+                'status': True,
+                'records': response_data
+            })
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Failed to load Pay Run summary',
+                'error': str(e)
+            }, status=500)
+
+
+
+class PayRunLockCheckView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            pay_run_id = request.data.get('pay_run_id')
+
+            if not pay_run_id:
+                return Response({
+                    'status': False,
+                    'locked': True,
+                    'message': 'pay_run_id is required'
+                }, status=400)
+
+            pay_run = PayRun.objects.filter(id=pay_run_id).first()
+            if not pay_run:
+                return Response({
+                    'status': False,
+                    'locked': True,
+                    'message': 'Pay Run not found'
+                }, status=404)
+
+            return Response({
+                'status': True,
+                'locked': pay_run.status in ['FINALIZED', 'POSTED']
+            })
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'locked': True,
+                'message': 'Failed to check pay run lock status',
+                'error': str(e)
+            }, status=500)
+
 
 
