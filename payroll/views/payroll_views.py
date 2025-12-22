@@ -17,7 +17,7 @@ from hr_management.models.hr_management_models import Employee
 from time_tracking.models.time_tracking_models import TimeEntry
 from hr_management.models.hr_management_models import Employee
 from payroll.models import Payroll, PayrollPeriod
-from payroll.services.payroll_calculator import calculate_employee_payroll
+from payroll.utils.payroll_calculator import calculate_employee_payroll
 from django.db import transaction
 
 class PayrollPeriodList(APIView):
@@ -535,12 +535,9 @@ class PayRunEmployeeListView(APIView):
     def post(self, request):
         try:
             pay_run_id = request.data.get('pay_run_id')
+
             if not pay_run_id:
                 return Response({'status': False, 'message': 'pay_run_id is required'}, status=400)
-
-            payrun = PayRun.objects.filter(id=pay_run_id).first()
-            if not payrun:
-                return Response({'status': False, 'message': 'Invalid Pay Run'}, status=404)
 
             current_employee = Employee.objects.filter(
                 user=request.user,
@@ -550,10 +547,11 @@ class PayRunEmployeeListView(APIView):
             if not current_employee or not current_employee.company:
                 return Response({'status': False, 'message': 'Unauthorized'}, status=403)
 
-            payrolls = Payroll.objects.select_related('employee').filter(
-                pay_run=payrun,
-                employee__company=current_employee.company
-            )
+            payrolls = Payroll.objects.filter(
+                pay_run_id=pay_run_id,
+                employee__company=current_employee.company,
+                deleted_at__isnull=True
+            ).select_related('employee', 'employee__user')
 
             serializer = PayrollSerializer(payrolls, many=True)
 
@@ -565,9 +563,10 @@ class PayRunEmployeeListView(APIView):
         except Exception as e:
             return Response({
                 'status': False,
-                'message': 'Failed to fetch payroll employees',
+                'message': 'Failed to load payroll list',
                 'error': str(e)
             }, status=500)
+
 
 
 class PayRunFinalizeView(APIView):

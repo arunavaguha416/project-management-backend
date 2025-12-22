@@ -3,6 +3,7 @@
 from django.db import models
 from authentication.models.user import User
 from hr_management.models.hr_management_models import Employee
+from payroll.models.salary_component import SalaryComponent
 from time_tracking.models.time_tracking_models import TimeEntry
 from django.utils.translation import gettext_lazy as _
 from project_management.softDeleteModel import SoftDeletionModel
@@ -104,6 +105,15 @@ class Payroll(SoftDeletionModel):
     total_deductions = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     net_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
+    # Overtime
+    overtime_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    overtime_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    overtime_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    performance_bonus = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    project_bonus = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+
     status = models.CharField(
         max_length=20,
         choices=[('CALCULATED', 'Calculated'), ('APPROVED', 'Approved')],
@@ -124,3 +134,14 @@ class Payroll(SoftDeletionModel):
     # REMOVED: calculate_payroll method
     # REMOVED: custom save method that called calculate_payroll
 
+class PayrollComponent(SoftDeletionModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
+    payroll = models.ForeignKey(Payroll, on_delete=models.CASCADE)
+    component = models.ForeignKey(SalaryComponent, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('payroll_component')
+        verbose_name_plural = _('payroll_components')

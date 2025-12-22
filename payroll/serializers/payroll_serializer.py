@@ -62,8 +62,8 @@ class PayrollSerializer(serializers.ModelSerializer):
     processed_by_name = serializers.CharField(source='processed_by.name', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.name', read_only=True)
     
-    overtime_hours_from_timesheet = serializers.SerializerMethodField()
-    attendance_percentage = serializers.SerializerMethodField()
+    # overtime_hours_from_timesheet = serializers.SerializerMethodField()
+    # attendance_percentage = serializers.SerializerMethodField()
     
     created_at = serializers.ReadOnlyField()
     updated_at = serializers.ReadOnlyField()
@@ -72,43 +72,49 @@ class PayrollSerializer(serializers.ModelSerializer):
         model = Payroll
         fields = [
             'id', 'employee', 'employee_name', 'employee_email', 'employee_designation',
-            'payroll_period', 'period_name', 'basic_salary', 'overtime_hours', 
-            'overtime_rate', 'overtime_amount', 'house_rent_allowance', 
-            'transport_allowance', 'medical_allowance', 'other_allowances',
-            'performance_bonus', 'attendance_bonus', 'project_bonus',
+            'payroll_period', 'period_name', 'basic_salary', 
+            # 'overtime_hours', 'overtime_rate', 'overtime_amount', 
+            'house_rent_allowance', 
+            'transport_allowance', 
+            # 'medical_allowance', 
+            'other_allowances',
+            # 'performance_bonus', 'attendance_bonus', 'project_bonus',
             'provident_fund', 'professional_tax', 'income_tax', 
-            'health_insurance', 'other_deductions', 'gross_salary',
+            # 'health_insurance', 'other_deductions', 
+            'gross_salary',
             'total_deductions', 'net_salary', 'status',
             'processed_by', 'processed_by_name', 'approved_by', 'approved_by_name',
-            'overtime_hours_from_timesheet', 'attendance_percentage',
+            # 'overtime_hours_from_timesheet', 'attendance_percentage',
             'created_at', 'updated_at', 'deleted_at'
         ]
         read_only_fields = [
-            'id', 'overtime_rate', 'overtime_amount', 'gross_salary', 
+            'id', 
+            # 'overtime_rate', 'overtime_amount', 
+            'gross_salary', 
             'total_deductions', 'net_salary', 'created_at', 'updated_at'
         ]
 
-    def get_overtime_hours_from_timesheet(self, obj):
-        """Calculate overtime hours from time tracking data"""
-        try:
-            time_entries = TimeEntry.objects.filter(
-                user=obj.employee.user,
-                date__range=[obj.payroll_period.start_date, obj.payroll_period.end_date],
-                duration__isnull=False
-            )
+    # def get_overtime_hours_from_timesheet(self, obj):
+    #     """Calculate overtime hours from time tracking data"""
+    #     try:
+    #         time_entries = TimeEntry.objects.filter(
+    #             user=obj.employee.user,
+    #             date__range=[obj.payroll_period.start_date, obj.payroll_period.end_date],
+    #             duration__isnull=False
+    #         )
             
-            total_hours = sum([
-                entry.duration.total_seconds() / 3600 
-                for entry in time_entries
-            ])
+    #         total_hours = sum([
+    #             entry.duration.total_seconds() / 3600 
+    #             for entry in time_entries
+    #         ])
             
-            # Standard working hours per month (assuming 22 working days * 8 hours)
-            standard_hours = 176
-            overtime_hours = max(0, total_hours - standard_hours)
+    #         # Standard working hours per month (assuming 22 working days * 8 hours)
+    #         standard_hours = 176
+    #         overtime_hours = max(0, total_hours - standard_hours)
             
-            return round(overtime_hours, 2)
-        except:
-            return 0.0
+    #         return round(overtime_hours, 2)
+    #     except:
+    #         return 0.0
 
     def get_attendance_percentage(self, obj):
         """Calculate attendance percentage from time tracking"""
