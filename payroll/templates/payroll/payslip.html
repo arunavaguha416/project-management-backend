@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: "Helvetica", Arial, sans-serif;
+      font-size: 12px;
+      color: #222;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 2px solid #0f766e;
+      padding-bottom: 10px;
+      margin-bottom: 15px;
+    }
+
+    .company {
+      font-size: 18px;
+      font-weight: bold;
+      color: #0f766e;
+    }
+
+    .title {
+      text-align: right;
+      font-size: 14px;
+    }
+
+    .info div {
+      margin: 4px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 6px;
+    }
+
+    th {
+      background: #e6fffa;
+    }
+
+    .summary {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f0fdfa;
+      border: 1px solid #0f766e;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .footer {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 10px;
+      color: #555;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="header">
+  <div class="company">{{ company.name }}</div>
+  <div class="title">
+    Payslip<br>
+    <small>{{ pay_period }}</small>
+  </div>
+</div>
+
+<div class="info">
+  <div><strong>Employee:</strong> {{ employee_name }}</div>
+  <div><strong>Employee ID:</strong> {{ employee_id }}</div>
+  <div><strong>Department:</strong> {{ department }}</div>
+  <div><strong>Pay Date:</strong> {{ pay_date }}</div>
+</div>
+
+<table>
+  <tr>
+    <th>Earnings</th><th>Amount (₹)</th>
+    <th>Deductions</th><th>Amount (₹)</th>
+  </tr>
+
+  <tr>
+    <td>Basic Salary</td><td>{{ basic_salary }}</td>
+    <td>Provident Fund</td><td>{{ pf }}</td>
+  </tr>
+  <tr>
+    <td>HRA</td><td>{{ hra }}</td>
+    <td>Professional Tax</td><td>{{ professional_tax }}</td>
+  </tr>
+  <tr>
+    <td>Transport Allowance</td><td>{{ transport }}</td>
+    <td>Income Tax</td><td>{{ income_tax }}</td>
+  </tr>
+
+  <tr>
+    <td><strong>Gross Salary</strong></td><td><strong>{{ gross_salary }}</strong></td>
+    <td><strong>Total Deductions</strong></td><td><strong>{{ total_deductions }}</strong></td>
+  </tr>
+</table>
+
+<div class="summary">
+  Net Pay: ₹ {{ net_pay }}
+</div>
+
+<div class="footer">
+  Generated on {{ generated_on }} • This is a system generated payslip
+</div>
+
+</body>
+</html>

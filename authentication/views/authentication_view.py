@@ -484,3 +484,41 @@ class UserDetails(APIView):
             hours = duration.total_seconds() / 3600
             return round(hours, 2)
         return None
+
+
+class CurrentUserRoleView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        try:
+            user = request.user
+
+            # Find employee linked to this user
+            employee = Employee.objects.filter(
+                user=user,
+                deleted_at__isnull=True
+            ).select_related('company').first()
+
+            if not employee:
+                return Response({
+                    'status': False,
+                    'message': 'Employee profile not found'
+                }, status=404)
+
+            return Response({
+                'status': True,
+                'data': {
+                    'user_id': str(user.id),
+                    'employee_id': str(employee.id),
+                    'role': employee.role,            # HR / MANAGER / EMPLOYEE
+                    'is_admin': user.is_staff,
+                    'company_id': str(employee.company_id) if employee.company_id else None
+                }
+            })
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Failed to fetch user role',
+                'error': str(e)
+            }, status=500)

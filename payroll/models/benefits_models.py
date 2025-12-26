@@ -9,7 +9,7 @@ from decimal import Decimal
 from datetime import date
 
 class BenefitPlan(SoftDeletionModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
+    id = models.CharField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
     name = models.CharField(max_length=200)
     description = models.TextField()
     plan_type = models.CharField(max_length=50, choices=[
@@ -51,7 +51,7 @@ class BenefitPlan(SoftDeletionModel):
         verbose_name_plural = _('BenefitPlans')
 
 class BenefitEnrollment(SoftDeletionModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
+    id = models.CharField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     benefit_plan = models.ForeignKey(BenefitPlan, on_delete=models.CASCADE)
     
@@ -99,7 +99,7 @@ class BenefitEnrollment(SoftDeletionModel):
         unique_together = ('employee', 'benefit_plan')
 
 class TaxConfiguration(SoftDeletionModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
+    id = models.CharField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
     country = models.CharField(max_length=100, default='India')
     state = models.CharField(max_length=100, blank=True)
     

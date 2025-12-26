@@ -12,6 +12,7 @@ urlpatterns = [
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('list/', UserList.as_view(), name='register'),
     path('details/<uuid:id>/', UserDetails.as_view(), name='user-details'),
+    path('check-role/', CurrentUserRoleView.as_view(), name='check-role'),
     # api/token/refresh/ does not require a separate view function because TokenRefreshView is a pre-built view provided by the djangorestframework-simplejwt library. 
     # It handles the logic for refreshing JWT access tokens using a valid refresh token, so you don’t need to write a custom view function for it.
 ]

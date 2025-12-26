@@ -19,6 +19,18 @@ from hr_management.models.hr_management_models import Employee
 from payroll.models import Payroll, PayrollPeriod
 from payroll.utils.payroll_calculator import calculate_employee_payroll
 from django.db import transaction
+from django.http import HttpResponse
+from payroll.utils.payslip_pdf import generate_payslip_pdf
+import pdfkit
+from django.template.loader import render_to_string
+from django.utils.timezone import now
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Table, TableStyle, Paragraph
+from reportlab.lib import colors
+
 
 class PayrollPeriodList(APIView):
     permission_classes = (IsAuthenticated,)
@@ -183,6 +195,13 @@ class PayrollApprove(APIView):
             payroll = Payroll.objects.select_related(
                 'employee', 'pay_run'
             ).filter(id=payroll_id).first()
+
+            if payroll.pay_run.status == 'FINALIZED':
+                return Response({
+                    'status': False,
+                    'message': 'Payroll is finalized and cannot be modified'
+                }, status=400)
+
 
             if not payroll:
                 return Response({'status': False, 'message': 'Payroll not found'}, status=404)
@@ -734,5 +753,215 @@ class PayRunLockCheckView(APIView):
                 'error': str(e)
             }, status=500)
 
+
+class PayrollDetailView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            payroll_id = request.data.get('payroll_id')
+
+            payroll = Payroll.objects.select_related('pay_run').filter(
+                id=payroll_id,
+                deleted_at__isnull=True
+            ).first()
+
+            if not payroll:
+                return Response({'status': False, 'message': 'Payroll not found'}, status=404)
+
+            return Response({
+                'status': True,
+                'records': {
+                    'payroll': PayrollSerializer(payroll).data,
+                    'pay_run_status': payroll.pay_run.status
+                }
+            })
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Failed to load payroll',
+                'error': str(e)
+            }, status=500)
+
+
+
+class PayslipDownloadView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            payroll_id = request.data.get('payroll_id')
+            payroll = Payroll.objects.select_related(
+                'employee', 'employee__department', 'payroll_period'
+            ).get(id=payroll_id)
+
+            html = render_to_string(
+                'payslip/payslip.html',
+                {'payroll': payroll}
+            )
+
+            pdf = pdfkit.from_string(html, False)
+
+            response = HttpResponse(pdf, content_type='application/pdf')
+            response['Content-Disposition'] = (
+                f'attachment; filename="Payslip_{payroll.employee.user.first_name}.pdf"'
+            )
+            return response
+
+        except Payroll.DoesNotExist:
+            return Response({'status': False, 'message': 'Invalid payroll'}, status=404)
+
+        except Exception as e:
+            return Response({
+                'status': False,
+                'message': 'Failed to generate payslip',
+                'error': str(e)
+            }, status=500)
+
+
+
+
+class PayslipGenerateView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            payroll_id = request.data.get("payroll_id")
+            if not payroll_id:
+                return Response(
+                    {"status": False, "message": "payroll_id is required"},
+                    status=400
+                )
+
+            payroll = Payroll.objects.select_related(
+                "employee",
+                "employee__company",
+                "payroll_period",
+                "employee__department",
+                "employee__user",
+            ).get(id=payroll_id)
+
+            employee = payroll.employee
+            company = employee.company
+
+            context = {
+                "company_name": company.name,
+                "employee_name": employee.user.name,
+                "employee_id": str(employee.id),
+                "department": employee.department.name if employee.department else "-",
+                "pay_period": payroll.payroll_period.start_date,
+                "pay_date": now().strftime("%d %b %Y"),
+
+                "basic_salary": payroll.basic_salary,
+                "hra": payroll.house_rent_allowance,
+                "transport": payroll.transport_allowance,
+                "overtime": payroll.overtime_amount,
+                "bonus": payroll.performance_bonus,
+
+                "pf": payroll.provident_fund,
+                "professional_tax": payroll.professional_tax,
+                "income_tax": payroll.income_tax,
+
+                "gross_salary": payroll.gross_salary,
+                "total_deductions": payroll.total_deductions,
+                "net_pay": payroll.net_salary,
+            }
+
+            pdf_buffer = generate_payslip_pdf(context)
+
+            response = HttpResponse(
+                pdf_buffer,
+                content_type="application/pdf"
+            )
+            response["Content-Disposition"] = (
+                f'attachment; filename="Payslip_{employee.user.name}.pdf"'
+            )
+            return response
+
+        except Payroll.DoesNotExist:
+            return Response(
+                {"status": False, "message": "Payroll not found"},
+                status=404
+            )
+
+        except Exception as e:
+            return Response(
+                {
+                    "status": False,
+                    "message": "Payslip generation failed",
+                    "error": str(e)
+                },
+                status=500
+            )
+        
+
+class EmployeePayslipListView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            user = request.user
+
+            # 1️⃣ Resolve employee
+            employee = Employee.objects.filter(
+                user=user,
+                deleted_at__isnull=True
+            ).first()
+
+            if not employee:
+                return Response(
+                    {"status": False, "message": "Employee not found"},
+                    status=403
+                )
+
+            month = request.data.get("month")
+            year = request.data.get("year")
+
+            # 2️⃣ Correct FK usage: pay_run (not payrun)
+            payrolls = Payroll.objects.select_related(
+                "payroll_period",
+                "pay_run"
+            ).filter(
+                employee=employee,
+                pay_run__status="FINALIZED",
+                deleted_at__isnull=True
+            ).order_by("-payroll_period__start_date")
+
+            if month:
+                payrolls = payrolls.filter(
+                    payroll_period__start_date__month=month
+                )
+
+            if year:
+                payrolls = payrolls.filter(
+                    payroll_period__start_date__year=year
+                )
+
+            # 3️⃣ Serialize minimal, employee-safe data
+            data = []
+            for p in payrolls:
+                data.append({
+                    "payroll_id": str(p.id),
+                    "pay_period": p.payroll_period.start_date,
+                    "gross_salary": p.gross_salary,
+                    "total_deductions": p.total_deductions,
+                    "net_salary": p.net_salary,
+                    "pay_date": p.pay_run.finalized_at,
+                })
+
+            return Response({
+                "status": True,
+                "records": data
+            })
+
+        except Exception as e:
+            return Response({
+                "status": False,
+                "message": "Failed to load payslips",
+                "error": str(e)
+            }, status=500)
+
+        
 
 

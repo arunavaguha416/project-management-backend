@@ -1,5 +1,6 @@
 from decimal import Decimal
 from payroll.utils.calculator import calculate_overtime
+from payroll.utils.tax_engine import calculate_monthly_tax
 
 def calculate_employee_payroll(employee, payroll_period):
     """
@@ -36,10 +37,13 @@ def calculate_employee_payroll(employee, payroll_period):
         project_bonus
     )
 
+     # ---- INCOME TAX ----
+    income_tax = calculate_monthly_tax(gross_salary)
+
     # ---- DEDUCTIONS ----
     provident_fund = basic_salary * Decimal('0.12')
     professional_tax = Decimal('200')
-    income_tax = Decimal('0')  # Phase-2
+    
 
     total_deductions = (
         provident_fund +

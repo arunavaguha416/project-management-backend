@@ -13,6 +13,11 @@ urlpatterns = [
     path('periods/add/', PayrollPeriodAdd.as_view(), name='payroll-period-add'),
     path('dashboard/summary/', PayrollDashboardSummary.as_view(), name='payroll-dashboard-summary'),
     path('dashboard/charts/', PayrollDashboardCharts.as_view(), name='payroll-dashboard-charts'),
+    path('details/', PayrollDetailView.as_view(), name='payroll-dashboard-charts'),
+    path('payslip/download/', PayslipDownloadView.as_view()),
+    path('payslip/generate/', PayslipGenerateView.as_view()),
+    path('employee/payslips/', EmployeePayslipListView.as_view()),
+
 
     # ===============================
     # PAYROLL GENERATION & MANAGEMENT
