@@ -4,6 +4,7 @@ from django.urls import path
 from .views.payroll_views import *
 from .views.expense_views import *
 from .views.benefits_views import *
+from .views.reports_views import *
 
 urlpatterns = [
     # ===============================
@@ -17,80 +18,11 @@ urlpatterns = [
     path('payslip/download/', PayslipDownloadView.as_view()),
     path('payslip/generate/', PayslipGenerateView.as_view()),
     path('employee/payslips/', EmployeePayslipListView.as_view()),
+    path('form16/summary/', Form16SummaryView.as_view()),
+    path('form16/download/', Form16DownloadView.as_view()),
 
 
-    # ===============================
-    # PAYROLL GENERATION & MANAGEMENT
-    # ===============================
-    path('generate/', PayrollGenerate.as_view(), name='payroll-generate'),
-    path('list/', PayrollList.as_view(), name='payroll-list'),
-    path('approve/', PayrollApprove.as_view(), name='payroll-approve'),
     
-    # ===============================
-    # PAYROLL ANALYTICS & REPORTS
-    # ===============================
-    path('stats/', PayrollStats.as_view(), name='payroll-stats'),
-    
-
-    
-    # ===============================
-    # EXPENSE MANAGEMENT
-    # ===============================
-    # Expense Categories
-    path('expenses/categories/list/', ExpenseCategoryList.as_view(), name='expense-category-list'),
-    path('expenses/categories/add/', ExpenseCategoryAdd.as_view(), name='expense-category-add'),
-    path('expenses/categories/update/', ExpenseCategoryUpdate.as_view(), name='expense-category-update'),
-    path('expenses/categories/delete/', ExpenseCategoryDelete.as_view(), name='expense-category-delete'),
-    
-    # Expense Claims
-    path('expenses/claims/list/', ExpenseClaimList.as_view(), name='expense-claim-list'),
-    path('expenses/claims/add/', ExpenseClaimAdd.as_view(), name='expense-claim-add'),
-    path('expenses/claims/update/', ExpenseClaimUpdate.as_view(), name='expense-claim-update'),
-    path('expenses/claims/submit/', ExpenseClaimSubmit.as_view(), name='expense-claim-submit'),
-    path('expenses/claims/approve/', ExpenseClaimApprove.as_view(), name='expense-claim-approve'),
-    path('expenses/claims/delete/', ExpenseClaimDelete.as_view(), name='expense-claim-delete'),
-    
-    # Expense Receipt Processing
-    path('expenses/receipt/upload/', ReceiptUpload.as_view(), name='receipt-upload'),
-    path('expenses/receipt/process/', ReceiptProcess.as_view(), name='receipt-process'),
-    
-    # Expense Reports
-    path('expenses/stats/', ExpenseStats.as_view(), name='expense-stats'),
-    path('expenses/export/', ExpenseExport.as_view(), name='expense-export'),
-    
-    # ===============================
-    # BENEFITS MANAGEMENT
-    # ===============================
-    # Benefit Plans
-    path('benefits/plans/list/', BenefitPlanList.as_view(), name='benefit-plan-list'),
-    path('benefits/plans/add/', BenefitPlanAdd.as_view(), name='benefit-plan-add'),
-    path('benefits/plans/details/', BenefitPlanDetails.as_view(), name='benefit-plan-details'),
-    path('benefits/plans/update/', BenefitPlanUpdate.as_view(), name='benefit-plan-update'),
-    path('benefits/plans/delete/', BenefitPlanDelete.as_view(), name='benefit-plan-delete'),
-    
-    # Benefit Enrollments
-    path('benefits/enrollments/list/', BenefitEnrollmentList.as_view(), name='benefit-enrollment-list'),
-    path('benefits/enrollments/add/', BenefitEnrollmentAdd.as_view(), name='benefit-enrollment-add'),
-    path('benefits/enrollments/update/', BenefitEnrollmentUpdate.as_view(), name='benefit-enrollment-update'),
-    path('benefits/enrollments/approve/', BenefitEnrollmentApprove.as_view(), name='benefit-enrollment-approve'),
-    path('benefits/enrollments/cancel/', BenefitEnrollmentCancel.as_view(), name='benefit-enrollment-cancel'),
-    path('benefits/enrollments/delete/', BenefitEnrollmentDelete.as_view(), name='benefit-enrollment-delete'),
-    
-    # Benefits Reports
-    path('benefits/stats/', BenefitsStats.as_view(), name='benefits-stats'),
-    path('benefits/export/', BenefitsExport.as_view(), name='benefits-export'),
-    
-    # ===============================
-    # TAX CONFIGURATION
-    # ===============================
-    path('tax-config/list/', TaxConfigurationList.as_view(), name='tax-configuration-list'),
-    path('tax-config/add/', TaxConfigurationAdd.as_view(), name='tax-configuration-add'),
-    path('tax-config/update/', TaxConfigurationUpdate.as_view(), name='tax-configuration-update'),
-    path('tax-config/activate/', TaxConfigurationActivate.as_view(), name='tax-configuration-activate'),
-    path('tax-config/delete/', TaxConfigurationDelete.as_view(), name='tax-configuration-delete'),
-    
-    # Tax Calculations
-    path('tax-calculator/', TaxCalculator.as_view(), name='tax-calculator'),
 
     # Pay Runs
     path('pay-runs/list/', PayRunListView.as_view()),
@@ -100,4 +32,31 @@ urlpatterns = [
     path('pay-runs/finalize/', PayRunFinalizeView.as_view()),
     path('pay-runs/summary/', PayRunSummaryView.as_view()),
     path('pay-runs/lock-status/', PayRunLockCheckView.as_view()),
+
+
+    # payroll/urls.py
+    path("reports/pf/", PFReportView.as_view()),
+    path("reports/pt/", PTReportView.as_view()),
+    path("reports/tds/", TDSReportView.as_view()),
+
+    
+    path("reports/pf/excel/", PFExcelExportView.as_view()),
+    path("reports/pt/excel/", PTExcelExportView.as_view()),
+    path("reports/tds/excel/", TDSExcelExportView.as_view()),
+    path("reports/dashboard/", StatutoryDashboardView.as_view()),
+    path("reports/challans/", StatutoryChallanListView.as_view()),
+    path("reports/challan/mark-paid/", StatutoryChallanMarkPaidView.as_view()),
+
+    path("reports/pf/export/", PFExcelExportView.as_view()),
+    path("reports/pt/export/", PTExcelExportView.as_view()),
+    path("reports/tds/export/", TDSExcelExportView.as_view()),
+    # payroll/urls.py
+    path("reports/bank-disbursement/export/", BankDisbursementExportView.as_view(),name="bank-disbursement-export"),
+
+    path('challans/list/', StatutoryChallanListView.as_view()),
+    path('challans/mark-paid/', StatutoryChallanMarkPaidView.as_view()),
+
+
+    
+
 ]

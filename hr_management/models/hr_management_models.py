@@ -21,6 +21,11 @@ class Employee(SoftDeletionModel):
     tax_regime = models.CharField(max_length=10,choices=[('OLD', 'Old'), ('NEW', 'New')],default='NEW')
     # salary_structure = models.ForeignKey(SalaryStructure,on_delete=models.SET_NULL,null=True, blank=True)
 
+    bank_name = models.CharField(max_length=100, blank=True)
+    bank_account_number = models.CharField(max_length=100, blank=True)
+    ifsc_code = models.CharField(max_length=100, blank=True)
+   
+
     is_payroll_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

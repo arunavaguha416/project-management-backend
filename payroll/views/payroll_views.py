@@ -1,5 +1,3 @@
-# payroll/views/payroll_views.py
-
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -14,6 +12,11 @@ from payroll.models.payroll_models import *
 from payroll.models.benefits_models import TaxConfiguration
 from payroll.serializers.payroll_serializer import *
 from hr_management.models.hr_management_models import Employee
+from payroll.utils.challan_generator import generate_statutory_challans
+from payroll.utils.form16_pdf import generate_form16_pdf
+from payroll.utils.form16_utils import generate_form16_summary
+from payroll.utils.payroll_lock import ensure_payroll_not_locked
+
 from time_tracking.models.time_tracking_models import TimeEntry
 from hr_management.models.hr_management_models import Employee
 from payroll.models import Payroll, PayrollPeriod
@@ -30,6 +33,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Table, TableStyle, Paragraph
 from reportlab.lib import colors
+from payroll.utils.date_utils import get_financial_year
 
 
 class PayrollPeriodList(APIView):
@@ -95,6 +99,13 @@ class PayrollGenerate(APIView):
             if not payrun:
                 return Response({'status': False, 'message': 'Invalid Pay Run'}, status=404)
 
+            if payrun.status == "FINALIZED":
+                return Response({
+                    "status": False,
+                    "message": "Cannot regenerate payroll after finalization"
+                }, status=400)
+
+            
             if payrun.status != 'DRAFT':
                 return Response({'status': False, 'message': 'Payroll already generated'}, status=400)
 
@@ -195,7 +206,7 @@ class PayrollApprove(APIView):
             payroll = Payroll.objects.select_related(
                 'employee', 'pay_run'
             ).filter(id=payroll_id).first()
-
+            
             if payroll.pay_run.status == 'FINALIZED':
                 return Response({
                     'status': False,
@@ -478,6 +489,11 @@ class PayRunGeneratePayrollView(APIView):
                     'status': False,
                     'message': 'Invalid Pay Run'
                 }, status=404)
+            if payrun.status == "FINALIZED":
+                return Response({
+                    "status": False,
+                    "message": "Cannot regenerate payroll after finalization"
+                }, status=400)
 
             if payrun.status != 'DRAFT':
                 return Response({
@@ -593,50 +609,39 @@ class PayRunFinalizeView(APIView):
 
     def post(self, request):
         try:
-            pay_run_id = request.data.get('pay_run_id')
+            pay_run_id = request.data.get("pay_run_id")
 
-            if not pay_run_id:
+            payrun = PayRun.objects.get(id=pay_run_id)
+
+            if payrun.status != "IN_PROGRESS":
                 return Response({
-                    'status': False,
-                    'message': 'pay_run_id is required'
+                    "status": False,
+                    "message": "Invalid payrun status"
                 }, status=400)
 
-            payrun = PayRun.objects.filter(id=pay_run_id).first()
-            if not payrun or payrun.status != 'IN_PROGRESS':
-                return Response({
-                    'status': False,
-                    'message': 'Pay Run not ready to finalize'
-                }, status=400)
-
-            payrolls = Payroll.objects.filter(pay_run=payrun)
-
-            payrun.total_gross_salary = sum(p.gross_salary for p in payrolls)
-            payrun.total_deductions = sum(p.total_deductions for p in payrolls)
-            payrun.total_net_salary = sum(p.net_salary for p in payrolls)
-
-            payrun.status = 'FINALIZED'
-            payrun.finalized_by = request.user
-            payrun.finalized_at = timezone.now()
-            payrun.save()
-
-            payrolls.update(
-                status='Approved',
-                approved_by=request.user
+            payrolls = Payroll.objects.filter(
+                pay_run=payrun
             )
 
+            # 🔥 AUTO CREATE CHALLANS
+            generate_statutory_challans(payrun, payrolls)
+
+            payrun.status = "FINALIZED"
+            payrun.finalized_at = now()
+            payrun.save()
 
             return Response({
-                'status': True,
-                'message': 'Pay Run finalized successfully'
+                "status": True,
+                "message": "PayRun finalized & challans generated"
             })
 
         except Exception as e:
             return Response({
-                'status': False,
-                'message': 'Failed to finalize pay run',
-                'error': str(e)
+                "status": False,
+                "message": "Failed to finalize payrun",
+                "error": str(e)
             }, status=500)
-
+        
 
 class PayRunSummaryView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -963,5 +968,108 @@ class EmployeePayslipListView(APIView):
             }, status=500)
 
         
+class Form16SummaryView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            financial_year = request.data.get("financial_year")
+            if not financial_year:
+                return Response(
+                    {"status": False, "message": "financial_year is required"},
+                    status=400
+                )
+
+            employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
+
+            if not employee:
+                return Response(
+                    {"status": False, "message": "Employee not found"},
+                    status=403
+                )
+
+            summary = generate_form16_summary(employee, financial_year)
+
+            return Response({
+                "status": True,
+                "records": summary
+            })
+
+        except Exception as e:
+            return Response({
+                "status": False,
+                "message": "Failed to load Form-16 summary",
+                "error": str(e)
+            }, status=500)
+
+class Form16DownloadView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            financial_year = request.data.get("financial_year")
+            if not financial_year:
+                return Response(
+                    {"status": False, "message": "financial_year is required"},
+                    status=400
+                )
+
+            employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
+
+            if not employee:
+                return Response(
+                    {"status": False, "message": "Employee not found"},
+                    status=403
+                )
+
+            company = employee.company
+
+            summary = generate_form16_summary(employee, financial_year)
+            pdf = generate_form16_pdf(
+                employee=employee,
+                company=company,
+                financial_year=financial_year,
+                summary=summary
+            )
+
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response["Content-Disposition"] = (
+                f'attachment; filename="Form16_{financial_year}.pdf"'
+            )
+            return response
+
+        except Exception as e:
+            return Response({
+                "status": False,
+                "message": "Form-16 download failed",
+                "error": str(e)
+            }, status=500)
 
 
+class PayrollUpdateView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        payroll_id = request.data.get("payroll_id")
+
+        payroll = Payroll.objects.select_related("pay_run").get(id=payroll_id)
+
+        # 🔒 HARD LOCK CHECK
+        ensure_payroll_not_locked(payroll)
+
+        payroll.overtime_hours = request.data.get("overtime_hours", payroll.overtime_hours)
+        payroll.performance_bonus = request.data.get("performance_bonus", payroll.performance_bonus)
+
+        payroll.recalculate()  # your existing salary engine
+        payroll.save()
+
+        return Response({
+            "status": True,
+            "message": "Payroll updated successfully"
+        })
