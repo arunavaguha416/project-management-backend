@@ -35,4 +35,6 @@ urlpatterns = [
     
     # Add this line to urlpatterns in urls.py
     path('hr/dashboard-metrics/', HRDashboardMetrics.as_view(), name='hr-dashboard-metrics'),
+    path("attendance/summary/", AttendanceSummaryView.as_view()),
+
 ]

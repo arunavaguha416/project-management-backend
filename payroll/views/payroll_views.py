@@ -8,6 +8,10 @@ from django.utils import timezone
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 
+from hr_management.utils.attendance_helper import calculate_attendance_summary
+from hr_management.utils.attendance_payroll import get_attendance_summary
+from hr_management.utils.attendance_utils import calculate_overtime_hours, calculate_working_days
+from hr_management.utils.leave_payroll import get_leave_summary
 from payroll.models.payroll_models import *
 from payroll.models.benefits_models import TaxConfiguration
 from payroll.serializers.payroll_serializer import *
@@ -18,7 +22,7 @@ from payroll.utils.form16_utils import generate_form16_summary
 from payroll.utils.payroll_lock import ensure_payroll_not_locked
 
 from time_tracking.models.time_tracking_models import TimeEntry
-from hr_management.models.hr_management_models import Employee
+from hr_management.models.hr_management_models import Employee, Attendance,LeaveRequest,LeaveBalance
 from payroll.models import Payroll, PayrollPeriod
 from payroll.utils.payroll_calculator import calculate_employee_payroll
 from django.db import transaction
@@ -475,93 +479,143 @@ class PayRunGeneratePayrollView(APIView):
 
     def post(self, request):
         try:
-            pay_run_id = request.data.get('pay_run_id')
-
+            pay_run_id = request.data.get("pay_run_id")
             if not pay_run_id:
-                return Response({
-                    'status': False,
-                    'message': 'pay_run_id is required'
-                }, status=400)
+                return Response(
+                    {"status": False, "message": "pay_run_id is required"},
+                    status=400
+                )
 
-            payrun = PayRun.objects.filter(id=pay_run_id).first()
+            payrun = PayRun.objects.select_related("payroll_period").filter(id=pay_run_id).first()
             if not payrun:
-                return Response({
-                    'status': False,
-                    'message': 'Invalid Pay Run'
-                }, status=404)
-            if payrun.status == "FINALIZED":
-                return Response({
-                    "status": False,
-                    "message": "Cannot regenerate payroll after finalization"
-                }, status=400)
+                return Response(
+                    {"status": False, "message": "Invalid Pay Run"},
+                    status=404
+                )
 
-            if payrun.status != 'DRAFT':
-                return Response({
-                    'status': False,
-                    'message': 'Payroll already generated'
-                }, status=400)
+            if payrun.status != "DRAFT":
+                return Response(
+                    {"status": False, "message": "Payroll already generated"},
+                    status=400
+                )
 
-            # 🔹 Identify HR employee & company
+            # Logged-in HR / Manager
             current_employee = Employee.objects.filter(
                 user=request.user,
                 deleted_at__isnull=True
             ).first()
 
             if not current_employee or not current_employee.company:
-                return Response({
-                    'status': False,
-                    'message': 'Unauthorized'
-                }, status=403)
+                return Response(
+                    {"status": False, "message": "Unauthorized"},
+                    status=403
+                )
+
+            company = current_employee.company
+            period = payrun.payroll_period
+            month = period.start_date.month
+            year = period.start_date.year
 
             employees = Employee.objects.filter(
-                company=current_employee.company,
+                company=company,
+                is_payroll_active=True,
                 deleted_at__isnull=True
             )
 
+            working_days = calculate_working_days(year, month)
+
             created_count = 0
 
-            with transaction.atomic():
-                for emp in employees:
-                    payroll, created = Payroll.objects.get_or_create(
-                        employee=emp,
-                        payroll_period=payrun.payroll_period,
-                        defaults={
-                            'pay_run': payrun,
-                            'processed_by': request.user
-                        }
-                    )
+            for emp in employees:
+                # Prevent duplicates
+                if Payroll.objects.filter(
+                    employee=emp,
+                    payroll_period=period
+                ).exists():
+                    continue
 
-                    # ⚠️ Prevent duplicates
-                    if not created:
-                        continue
+                # Attendance
+                attendances = Attendance.objects.filter(
+                    employee=emp,
+                    date__year=year,
+                    date__month=month
+                )
 
-                    values = calculate_employee_payroll(emp)
-                    for field, value in values.items():
-                        setattr(payroll, field, value)
+                present_days = attendances.count()
+                overtime_hours = calculate_overtime_hours(attendances)
 
-                    payroll.status = 'CALCULATED'
-                    payroll.save()
-                    created_count += 1
+                # Approved leaves
+                approved_leaves = LeaveRequest.objects.filter(
+                    employee=emp,
+                    status="APPROVED",
+                    start_date__year=year,
+                    start_date__month=month
+                )
 
-                payrun.total_employees = created_count
-                payrun.status = 'IN_PROGRESS'
-                payrun.save(update_fields=['total_employees', 'status'])
+                approved_leave_days = sum(
+                    (lr.end_date - lr.start_date).days + 1
+                    for lr in approved_leaves
+                )
+
+                payable_days = min(
+                    present_days + approved_leave_days,
+                    working_days
+                )
+
+                # Salary calculations
+                monthly_salary = float(emp.salary or 0)
+                per_day_salary = monthly_salary / working_days if working_days else 0
+
+                basic_salary = round(per_day_salary * payable_days, 2)
+                overtime_amount = round(overtime_hours * 200, 2)  # configurable
+
+                gross_salary = basic_salary + overtime_amount
+
+                # Deductions (simple placeholders, already exist in model)
+                provident_fund = round(basic_salary * 0.12, 2)
+                professional_tax = 200 if gross_salary > 15000 else 0
+                income_tax = 0  # handled later by tax engine
+
+                total_deductions = provident_fund + professional_tax + income_tax
+                net_salary = gross_salary - total_deductions
+
+                Payroll.objects.create(
+                    employee=emp,
+                    payroll_period=period,
+                    pay_run=payrun,
+                    basic_salary=basic_salary,
+                    overtime_hours=overtime_hours,
+                    overtime_amount=overtime_amount,
+                    gross_salary=gross_salary,
+                    provident_fund=provident_fund,
+                    professional_tax=professional_tax,
+                    income_tax=income_tax,
+                    total_deductions=total_deductions,
+                    net_salary=net_salary,
+                    processed_by=request.user,
+                    status="GENERATED"
+                )
+
+                created_count += 1
+
+            payrun.total_employees = created_count
+            payrun.status = "IN_PROGRESS"
+            payrun.save()
 
             return Response({
-                'status': True,
-                'message': 'Payroll generated successfully',
-                'records': {
-                    'employees_processed': created_count
-                }
+                "status": True,
+                "message": "Payroll generated successfully",
+                "employees_processed": created_count
             })
 
         except Exception as e:
             return Response({
-                'status': False,
-                'message': 'Failed to generate payroll',
-                'error': str(e)
+                "status": False,
+                "message": "Failed to generate payroll",
+                "error": str(e)
             }, status=500)
 
+        
 
 
 class PayRunEmployeeListView(APIView):
@@ -569,10 +623,12 @@ class PayRunEmployeeListView(APIView):
 
     def post(self, request):
         try:
-            pay_run_id = request.data.get('pay_run_id')
-
+            pay_run_id = request.data.get("pay_run_id")
             if not pay_run_id:
-                return Response({'status': False, 'message': 'pay_run_id is required'}, status=400)
+                return Response(
+                    {"status": False, "message": "pay_run_id is required"},
+                    status=400
+                )
 
             current_employee = Employee.objects.filter(
                 user=request.user,
@@ -580,27 +636,35 @@ class PayRunEmployeeListView(APIView):
             ).first()
 
             if not current_employee or not current_employee.company:
-                return Response({'status': False, 'message': 'Unauthorized'}, status=403)
+                return Response(
+                    {"status": False, "message": "Unauthorized"},
+                    status=403
+                )
 
-            payrolls = Payroll.objects.filter(
+            payrolls = Payroll.objects.select_related(
+                "employee",
+                "employee__user",
+                "payroll_period"
+            ).filter(
                 pay_run_id=pay_run_id,
                 employee__company=current_employee.company,
                 deleted_at__isnull=True
-            ).select_related('employee', 'employee__user')
+            )
 
             serializer = PayrollSerializer(payrolls, many=True)
 
             return Response({
-                'status': True,
-                'records': serializer.data
+                "status": True,
+                "records": serializer.data
             })
 
         except Exception as e:
             return Response({
-                'status': False,
-                'message': 'Failed to load payroll list',
-                'error': str(e)
+                "status": False,
+                "message": "Failed to load payroll employees",
+                "error": str(e)
             }, status=500)
+
 
 
 

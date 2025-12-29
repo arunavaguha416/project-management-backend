@@ -52,6 +52,7 @@ urlpatterns = [
     path("reports/tds/export/", TDSExcelExportView.as_view()),
     # payroll/urls.py
     path("reports/bank-disbursement/export/", BankDisbursementExportView.as_view(),name="bank-disbursement-export"),
+    
 
     path('challans/list/', StatutoryChallanListView.as_view()),
     path('challans/mark-paid/', StatutoryChallanMarkPaidView.as_view()),

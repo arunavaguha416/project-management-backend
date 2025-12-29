@@ -113,6 +113,12 @@ class Payroll(SoftDeletionModel):
     performance_bonus = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     project_bonus = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
+    # Attendence
+    working_days = models.IntegerField(default=0)
+    present_days = models.IntegerField(default=0)
+    paid_leave_days = models.IntegerField(default=0)
+    payable_days = models.IntegerField(default=0)
+    lop_days = models.IntegerField(default=0)
 
     status = models.CharField(
         max_length=20,

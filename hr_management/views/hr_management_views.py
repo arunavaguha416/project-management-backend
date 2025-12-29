@@ -7,6 +7,7 @@ from hr_management.models.hr_management_models import *
 from hr_management.serializers.hr_management_serializer import *
 from django.core.paginator import Paginator
 from datetime import timedelta
+from hr_management.utils.attendance_utils import calculate_overtime_hours, calculate_working_days
 from projects.models.project_model import Project, UserMapping
 from django.utils import timezone
 from projects.models.project_model import Project
@@ -1779,3 +1780,76 @@ class HRDashboardMetrics(APIView):
                 'message': 'Error fetching dashboard metrics',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class AttendanceSummaryView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            month = int(request.data.get("month"))
+            year = int(request.data.get("year"))
+
+            if not month or not year:
+                return Response(
+                    {"status": False, "message": "month and year are required"},
+                    status=400
+                )
+
+            # Logged-in employee (HR / Manager)
+            current_employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
+
+            if not current_employee or not current_employee.company:
+                return Response(
+                    {"status": False, "message": "Unauthorized"},
+                    status=403
+                )
+
+            company = current_employee.company
+
+            employees = Employee.objects.filter(
+                company=company,
+                is_payroll_active=True,
+                deleted_at__isnull=True
+            )
+
+            working_days = calculate_working_days(year, month)
+
+            result = []
+
+            for emp in employees:
+                attendances = Attendance.objects.filter(
+                    employee=emp,
+                    date__year=year,
+                    date__month=month
+                )
+
+                present_days = attendances.count()
+                absent_days = max(working_days - present_days, 0)
+
+                overtime_hours = calculate_overtime_hours(attendances)
+
+                result.append({
+                    "employee_id": emp.id,
+                    "employee_name": emp.user.full_name if emp.user else "",
+                    "working_days": working_days,
+                    "present_days": present_days,
+                    "absent_days": absent_days,
+                    "overtime_hours": overtime_hours
+                })
+
+            return Response({
+                "status": True,
+                "records": result
+            })
+
+        except Exception as e:
+            return Response({
+                "status": False,
+                "message": "Failed to load attendance summary",
+                "error": str(e)
+            }, status=500)
