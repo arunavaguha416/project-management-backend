@@ -5,13 +5,21 @@ from .views.payroll_views import *
 from .views.expense_views import *
 from .views.benefits_views import *
 from .views.reports_views import *
+from .views.payroll_validation import *
+from .views.payroll_audit_views import *
+from .views.payroll_rollback import *
+from .views.payroll_period_views import *
 
 urlpatterns = [
     # ===============================
     # PAYROLL PERIODS MANAGEMENT
     # ===============================
     path('periods/list/', PayrollPeriodList.as_view(), name='payroll-period-list'),
+    path('periods/listing/', PayrollPeriodPaginatedList.as_view(), name='payroll-period-listing'),
     path('periods/add/', PayrollPeriodAdd.as_view(), name='payroll-period-add'),
+    path("periods/update/", PayrollPeriodUpdateView.as_view()),
+
+
     path('dashboard/summary/', PayrollDashboardSummary.as_view(), name='payroll-dashboard-summary'),
     path('dashboard/charts/', PayrollDashboardCharts.as_view(), name='payroll-dashboard-charts'),
     path('details/', PayrollDetailView.as_view(), name='payroll-dashboard-charts'),
@@ -20,7 +28,8 @@ urlpatterns = [
     path('employee/payslips/', EmployeePayslipListView.as_view()),
     path('form16/summary/', Form16SummaryView.as_view()),
     path('form16/download/', Form16DownloadView.as_view()),
-
+    path("approve-all/", PayRunApproveAllView.as_view()),
+    
 
     
 
@@ -32,6 +41,10 @@ urlpatterns = [
     path('pay-runs/finalize/', PayRunFinalizeView.as_view()),
     path('pay-runs/summary/', PayRunSummaryView.as_view()),
     path('pay-runs/lock-status/', PayRunLockCheckView.as_view()),
+    path('pay-runs/reconciliation/', PayRunReconciliationView.as_view()),
+    path("pay-runs/variance/", PayRunVarianceView.as_view()),
+    
+    path("approve/", PayrollApprove.as_view()),
 
 
     # payroll/urls.py
@@ -57,7 +70,11 @@ urlpatterns = [
     path('challans/list/', StatutoryChallanListView.as_view()),
     path('challans/mark-paid/', StatutoryChallanMarkPaidView.as_view()),
 
+    path("pay-runs/validate/", PayrollValidationView.as_view(), name="payrun-validate"),
 
     
+    path("audit-trail/", PayrollAuditTrailView.as_view(), name="payroll-audit-trail"),
+    path( "pay-runs/rollback/", PayrollRollbackView.as_view(),    name="payrun-rollback"
+),
 
 ]

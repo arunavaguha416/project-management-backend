@@ -18,6 +18,7 @@ class PayrollPeriod(SoftDeletionModel):
     start_date = models.DateField()
     end_date = models.DateField()
     period_name = models.CharField(max_length=100)  # e.g., "January 2024"
+    financial_year = models.CharField(max_length=100,null=True, blank=True)
     status = models.CharField(max_length=20, choices=[
         ('Draft', 'Draft'),
         ('Processing', 'Processing'),
@@ -151,3 +152,55 @@ class PayrollComponent(SoftDeletionModel):
     class Meta:
         verbose_name = _('payroll_component')
         verbose_name_plural = _('payroll_components')
+
+
+# ===============================
+# PAYROLL AUDIT TRAIL
+# ===============================
+
+class PayrollAuditLog(models.Model):
+    payroll = models.ForeignKey(
+        "Payroll",
+        on_delete=models.CASCADE,
+        related_name="audit_logs"
+    )
+    field_name = models.CharField(max_length=100)
+    old_value = models.TextField(null=True, blank=True)
+    new_value = models.TextField(null=True, blank=True)
+
+    changed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-changed_at"]
+
+    def __str__(self):
+        return f"{self.field_name} changed for Payroll {self.payroll_id}"
+
+
+# ===============================
+# PAYROLL ROLLBACK AUDIT
+# ===============================
+
+class PayrollRollbackLog(models.Model):
+    pay_run = models.ForeignKey(
+        "PayRun",
+        on_delete=models.CASCADE,
+        related_name="rollback_logs"
+    )
+    rolled_back_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    reason = models.TextField()
+    rolled_back_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Rollback for PayRun {self.pay_run_id}"

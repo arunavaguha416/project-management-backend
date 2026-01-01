@@ -12,7 +12,7 @@ class PayrollPeriodSerializer(serializers.ModelSerializer):
     class Meta:
         model = PayrollPeriod
         fields = [
-            'id', 'start_date', 'end_date', 'period_name', 'status',
+            'id', 'start_date', 'end_date', 'period_name', 'status','financial_year',
             'created_at', 'updated_at', 'deleted_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
