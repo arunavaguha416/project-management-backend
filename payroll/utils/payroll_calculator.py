@@ -1,16 +1,20 @@
 from decimal import Decimal
 from payroll.utils.calculator import calculate_overtime
 from payroll.utils.tax_engine import calculate_monthly_tax
+from payroll.utils.salary_component_engine import calculate_salary_components
+from payroll.utils.benefits_engine import calculate_benefit_deductions
+
 
 def calculate_employee_payroll(employee, payroll_period):
-    """
-    Returns calculated payroll values for one employee
-    """
-
     # ---- BASIC ----
     basic_salary = Decimal(str(employee.salary).replace(',', '') or 0)
 
-    # ---- ALLOWANCES ----
+    # ---- SALARY COMPONENTS ----
+    component_earnings, component_deductions, component_breakdown = (
+        calculate_salary_components(basic_salary)
+    )
+
+    # ---- EXISTING ALLOWANCES (KEEP) ----
     house_rent_allowance = basic_salary * Decimal('0.40')
     transport_allowance = Decimal('1600')
     other_allowances = Decimal('0')
@@ -22,56 +26,54 @@ def calculate_employee_payroll(employee, payroll_period):
         payroll_period
     )
 
-    # ---- BONUSES (manual later) ----
-    performance_bonus = Decimal('0')
-    project_bonus = Decimal('0')
-
     # ---- GROSS ----
     gross_salary = (
         basic_salary +
         house_rent_allowance +
         transport_allowance +
         other_allowances +
-        overtime_amount +
-        performance_bonus +
-        project_bonus
+        component_earnings +
+        overtime_amount
     )
 
-     # ---- INCOME TAX ----
+    # ---- TAX ----
     income_tax = calculate_monthly_tax(gross_salary)
 
     # ---- DEDUCTIONS ----
     provident_fund = basic_salary * Decimal('0.12')
     professional_tax = Decimal('200')
-    
+    benefit_deductions = calculate_benefit_deductions(employee)
 
     total_deductions = (
         provident_fund +
         professional_tax +
-        income_tax
+        income_tax +
+        component_deductions +
+        benefit_deductions
     )
 
     net_salary = gross_salary - total_deductions
 
     return {
-        'basic_salary': basic_salary,
-        'house_rent_allowance': house_rent_allowance,
-        'transport_allowance': transport_allowance,
-        'other_allowances': other_allowances,
+        # KEEP EXISTING RETURNS (unchanged)
+        "basic_salary": basic_salary,
+        "house_rent_allowance": house_rent_allowance,
+        "transport_allowance": transport_allowance,
+        "other_allowances": other_allowances,
 
-        'overtime_hours': overtime_hours,
-        'overtime_rate': overtime_rate,
-        'overtime_amount': overtime_amount,
+        "overtime_hours": overtime_hours,
+        "overtime_rate": overtime_rate,
+        "overtime_amount": overtime_amount,
 
-        'performance_bonus': performance_bonus,
-        'project_bonus': project_bonus,
+        "gross_salary": gross_salary,
 
-        'gross_salary': gross_salary,
+        "provident_fund": provident_fund,
+        "professional_tax": professional_tax,
+        "income_tax": income_tax,
+        "total_deductions": total_deductions,
 
-        'provident_fund': provident_fund,
-        'professional_tax': professional_tax,
-        'income_tax': income_tax,
-        'total_deductions': total_deductions,
+        "net_salary": net_salary,
 
-        'net_salary': net_salary
+        # NEW (OPTIONAL, SAFE)
+        "component_breakdown": component_breakdown
     }

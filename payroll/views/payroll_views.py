@@ -41,82 +41,9 @@ from payroll.utils.date_utils import get_financial_year
 from payroll.utils.payroll_audit import log_payroll_change
 from payroll.serializers.payrun_employee_serializer import PayRunEmployeeSerializer
 from payroll.views.payroll_validation import PayrollValidationView
-
-
-class PayrollGenerate(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request):
-        try:
-            pay_run_id = request.data.get('pay_run_id')
-            if not pay_run_id:
-                return Response({'status': False, 'message': 'pay_run_id is required'}, status=400)
-
-            payrun = PayRun.objects.filter(id=pay_run_id).first()
-            if not payrun:
-                return Response({'status': False, 'message': 'Invalid Pay Run'}, status=404)
-
-            if payrun.status == "FINALIZED":
-                return Response({
-                    "status": False,
-                    "message": "Cannot regenerate payroll after finalization"
-                }, status=400)
-
-            
-            if payrun.status != 'DRAFT':
-                return Response({'status': False, 'message': 'Payroll already generated'}, status=400)
-
-            current_employee = Employee.objects.filter(
-                user=request.user,
-                deleted_at__isnull=True
-            ).first()
-
-            if not current_employee or not current_employee.company:
-                return Response({'status': False, 'message': 'Unauthorized'}, status=403)
-
-            employees = Employee.objects.filter(
-                company=current_employee.company,
-                deleted_at__isnull=True
-            )
-
-            created_count = 0
-
-            with transaction.atomic():
-                for emp in employees:
-                    payroll, created = Payroll.objects.get_or_create(
-                        employee=emp,
-                        payroll_period=payrun.payroll_period,
-                        defaults={'pay_run': payrun}
-                    )
-
-                    values = calculate_employee_payroll(emp)
-                    for field, value in values.items():
-                        setattr(payroll, field, value)
-
-                    payroll.status = 'Calculated'
-                    payroll.processed_by = request.user
-                    payroll.save()
-
-                    if created:
-                        created_count += 1
-
-                payrun.total_employees = employees.count()
-                payrun.status = 'IN_PROGRESS'
-                payrun.save(update_fields=['total_employees', 'status'])
-
-            return Response({
-                'status': True,
-                'message': 'Payroll generated successfully',
-                'records': {'employees_processed': created_count}
-            })
-
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'Failed to generate payroll',
-                'error': str(e)
-            }, status=500)
-
+from payroll.utils.tax_validation import validate_full_tax_slab_set
+from payroll.utils.salary_component_engine import calculate_salary_components
+from payroll.utils.benefits_engine import calculate_benefit_deductions
 
 
 class PayrollList(APIView):
@@ -482,6 +409,18 @@ class PayRunGeneratePayrollView(APIView):
 
     def post(self, request):
         try:
+            try:
+                validate_full_tax_slab_set()
+            except Exception as e:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Invalid tax configuration",
+                        "error": str(e)
+                    },
+                    status=400
+                )
+            
             pay_run_id = request.data.get("pay_run_id")
             if not pay_run_id:
                 return Response(
@@ -704,6 +643,17 @@ class PayRunFinalizeView(APIView):
 
     def post(self, request):
         try:
+            try:
+                validate_full_tax_slab_set()
+            except Exception as e:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Cannot finalize payroll due to invalid tax slabs",
+                        "error": str(e)
+                    },
+                    status=400
+                )
             pay_run_id = request.data.get("pay_run_id")
             if not pay_run_id:
                 return Response(
@@ -897,28 +847,113 @@ class PayrollDetailView(APIView):
         try:
             payroll_id = request.data.get('payroll_id')
 
-            payroll = Payroll.objects.select_related('pay_run').filter(
+            if not payroll_id:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "payroll_id is required"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            payroll = Payroll.objects.select_related(
+                "employee",
+                "employee__user",
+                "pay_run",
+                "pay_run__payroll_period"
+            ).filter(
                 id=payroll_id,
                 deleted_at__isnull=True
             ).first()
 
             if not payroll:
-                return Response({'status': False, 'message': 'Payroll not found'}, status=404)
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Payroll record not found"
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
 
-            return Response({
-                'status': True,
-                'records': {
-                    'payroll': PayrollSerializer(payroll).data,
-                    'pay_run_status': payroll.pay_run.status
-                }
-            })
+            # =====================================================
+            # SALARY COMPONENTS (dynamic, not stored)
+            # =====================================================
+            basic_salary = payroll.basic_salary
+
+            component_earnings, component_deductions, component_breakdown = (
+                calculate_salary_components(basic_salary)
+            )
+
+            # =====================================================
+            # BENEFITS (employee contribution only)
+            # =====================================================
+            benefit_deductions = calculate_benefit_deductions(
+                payroll.employee
+            )
+
+            # =====================================================
+            # RESPONSE (BACKWARD COMPATIBLE)
+            # =====================================================
+            data = {
+                # --- Identity ---
+                "payroll_id": str(payroll.id),
+                "employee_id": str(payroll.employee.id),
+                "employee_name": payroll.employee.user.name,
+                "department": (
+                    payroll.employee.department.name
+                    if payroll.employee.department else "-"
+                ),
+
+                # --- Period ---
+                "payroll_period": payroll.pay_run.payroll_period.period_name,
+                "pay_run_status": payroll.pay_run.status,
+
+                # --- Earnings ---
+                "basic_salary": payroll.basic_salary,
+                "house_rent_allowance": payroll.house_rent_allowance,
+                "transport_allowance": payroll.transport_allowance,
+                "other_allowances": payroll.other_allowances,
+                "overtime_amount": payroll.overtime_amount,
+                "gross_salary": payroll.gross_salary,
+
+                # --- Deductions ---
+                "provident_fund": payroll.provident_fund,
+                "professional_tax": payroll.professional_tax,
+                "income_tax": payroll.income_tax,
+                "benefit_deductions": benefit_deductions,
+                "total_deductions": payroll.total_deductions,
+
+                # --- Net ---
+                "net_salary": payroll.net_salary,
+
+                # =================================================
+                # NEW (SAFE, ADDITIVE)
+                # =================================================
+                "component_breakdown": component_breakdown,
+
+                # --- Metadata ---
+                "status": payroll.status,
+                "created_at": payroll.created_at,
+                "updated_at": payroll.updated_at
+            }
+
+            return Response(
+                {
+                    "status": True,
+                    "records": data
+                },
+                status=status.HTTP_200_OK
+            )
 
         except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'Failed to load payroll',
-                'error': str(e)
-            }, status=500)
+            return Response(
+                {
+                    "status": False,
+                    "message": "Failed to load payroll details",
+                    "error": str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 
@@ -1104,6 +1139,17 @@ class Form16SummaryView(APIView):
 
     def post(self, request):
         try:
+            try:
+                validate_full_tax_slab_set()
+            except Exception as e:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Invalid tax configuration",
+                        "error": str(e)
+                    },
+                    status=400
+                )
             financial_year = request.data.get("financial_year")
             if not financial_year:
                 return Response(

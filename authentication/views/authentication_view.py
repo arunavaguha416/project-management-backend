@@ -510,7 +510,7 @@ class CurrentUserRoleView(APIView):
                 'data': {
                     'user_id': str(user.id),
                     'employee_id': str(employee.id),
-                    'role': employee.role,            # HR / MANAGER / EMPLOYEE
+                    'role': user.role,            # HR / MANAGER / EMPLOYEE
                     'is_admin': user.is_staff,
                     'company_id': str(employee.company_id) if employee.company_id else None
                 }
