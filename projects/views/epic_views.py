@@ -5,6 +5,9 @@ from rest_framework.permissions import IsAuthenticated
 from projects.models.epic_model import Epic
 from projects.models.project_model import Project
 
+from projects.utils.permissions import require_project_manager
+
+
 class EpicAdd(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -25,7 +28,15 @@ class EpicAdd(APIView):
             if not project:
                 return Response({'status': False, 'message': 'Project not found'}, status=status.HTTP_200_OK)
 
-            epic = Epic.objects.create(project=project, name=name, description=description, color=color)
+            # 🔐 permission
+            require_project_manager(request.user, project)
+
+            epic = Epic.objects.create(
+                project=project,
+                name=name,
+                description=description,
+                color=color
+            )
 
             return Response({
                 'status': True,

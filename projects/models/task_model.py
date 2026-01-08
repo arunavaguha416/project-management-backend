@@ -56,3 +56,11 @@ class Task(SoftDeletionModel):
     class Meta:
         verbose_name = _('Task')
         verbose_name_plural = _('Tasks')
+
+class TaskStatusHistory(SoftDeletionModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    task = models.ForeignKey('Task', on_delete=models.CASCADE)
+    from_status = models.CharField(max_length=50)
+    to_status = models.CharField(max_length=50)
+    changed_by = models.ForeignKey('authentication.User', on_delete=models.SET_NULL, null=True)
+    changed_at = models.DateTimeField(auto_now_add=True)

@@ -1,9 +1,17 @@
 from django.urls import path
+
+from projects.views.sprint_ai_views import *
+from projects.views.sprint_settings_views import *
 from .views.projects_views import *
 from .views.task_views import *
 from .views.comment_view import *
 from .views.sprint_views import *
 from .views.ai_views import *
+from .views.workflow_views import *
+from .views.task_status_history_views import *
+from .views.epic_views import *
+from projects.views.sprint_planning_views import *
+from projects.views.sprint_reports_views import *
 
 
 urlpatterns = [
@@ -16,17 +24,36 @@ urlpatterns = [
     path('delete/<uuid:project_id>/', ProjectDelete.as_view(), name='project_delete'),
     path('restore/', RestoreProject.as_view(), name='project_restore'),
     path('details/<uuid:id>/', ProjectDetails.as_view(), name='project-details'),
-    path('manager/projects/list', ManagerProjects.as_view(), name='manager-project-list'),
-    path('assign-manager/', AssignProjectManager.as_view(), name='assign_project_manager'),
-    path('employees/project/list/', EmployeeProjectList.as_view(), name='employees-project-list'),
-    path('tasks/list/', ProjectTasksList.as_view(), name='project-tasks-list'),
-    path('milestones/list/', ProjectMilestonesList.as_view(), name='project-milestones-list'),
-    path('manager/list/', ManagerProjectList.as_view(), name='manager-list'),
-    path('upload-files/', UploadProjectFiles.as_view(), name='upload-files'),
-     path('upload-files-list/', ProjectFilesList.as_view(), name='upload-files-list'),
-     # In your projects URLs
-    path('generate-invoice/', GenerateProjectInvoice.as_view(), name='generate-invoice'),
+
+    # --------------------------------------------------
+    # Project listings
+    # --------------------------------------------------
+    path('manager/', ManagerProjects.as_view(), name='manager-projects'),
+    path('employee/', EmployeeProjectList.as_view(), name='employee-projects'),
+    path('manager/list/', ManagerProjectList.as_view(), name='manager-project-list'),
+
+    # --------------------------------------------------
+    # Project configuration
+    # --------------------------------------------------
+    path('assign-manager/', AssignProjectManager.as_view(), name='assign-project-manager'),
+
+    # --------------------------------------------------
+    # Project data views
+    # --------------------------------------------------
+    path('tasks/', ProjectTasksList.as_view(), name='project-tasks-list'),
+    path('milestones/', ProjectMilestonesList.as_view(), name='project-milestones-list'),
     path('users/', ProjectUsers.as_view(), name='project-users'),
+
+    # --------------------------------------------------
+    # Project files
+    # --------------------------------------------------
+    path('files/upload/', UploadProjectFiles.as_view(), name='upload-project-files'),
+    path('files/list/', ProjectFilesList.as_view(), name='project-files-list'),
+
+    # --------------------------------------------------
+    # Project finance
+    # --------------------------------------------------
+    path('invoice/generate/', GenerateProjectInvoice.as_view(), name='generate-project-invoice'),
 
     # path('abc//', UploadProjectFiles.as_view(), name='upload-files'),
     
@@ -36,19 +63,13 @@ urlpatterns = [
     path('sprints/details/', SprintDetails.as_view(), name='sprint_details'),
     path('sprints/update/', SprintUpdate.as_view(), name='sprint_update'),
     path('sprints/delete/<uuid:sprint_id>/', SprintDelete.as_view(), name='sprint_delete'),
-    path('sprints/restore/', RestoreSprint.as_view(), name='sprint_restore'),
-    path('sprints/add-project/', AddProjectToSprint.as_view(), name='add_project_to_sprint'),
-    path('sprints/remove-project/', RemoveProjectFromSprint.as_view(), name='remove_project_from_sprint'),
-    path('sprints/backlog/', BacklogForSprint.as_view(), name='sprint_backlog'),
-    path('sprints/project/', ProjectSprints.as_view(), name='project-sprints'),
+    
     path('sprints/summary/', SprintSummary.as_view(), name='sprints-summary'),
     
     path('sprints/tasks/', SprintTaskList.as_view()),
     path('task/move/', TaskMove.as_view()),
     # path('tasks/list/', ProjectTasksList.as_view()),
-    path('backlog/list/', BacklogSimpleList.as_view()),
-    # path('milestones/list/', ProjectMilestonesList.as_view()),
-    path('sprints/current/', CurrentSprint.as_view()),
+    path('sprints/backlog/', BacklogSimpleList.as_view()),
     path('sprints/start/', SprintStart.as_view()),
     path('sprints/end/', SprintEnd.as_view()),
     path('task/update/properties/', TaskUpdateProperties.as_view()),
@@ -56,18 +77,17 @@ urlpatterns = [
 
 
     path('task/add/', TaskAdd.as_view(), name='task_add'),
-    path('task/list/', SprintTaskList.as_view(), name='sprint_task_list'),
+    path('sprints/tasks/', SprintTaskList.as_view(), name='sprint_task_list'),
      path('task/backlog/', BacklogTaskList.as_view(), name='backlog_task_list'),
     path('task/details/', TaskDetails.as_view(), name='task_details'),
-    path('task/update/', TaskUpdate.as_view(), name='task_update'),
     path('task/move/', TaskMove.as_view(), name='task_move'),
+    path('task/update/', TaskUpdateDetails.as_view(), name='task-update'),
     path('task/delete/<uuid:task_id>/', TaskDelete.as_view(), name='task_delete'),
     path('task/restore/', RestoreTask.as_view(), name='task_restore'),
 
     path('comments/add/', CommentAdd.as_view(), name='comment-add'),
     path('comments/list/', CommentList.as_view(), name='comment-list'),
     path('comments/details/', CommentDetails.as_view(), name='comment-details'),
-    path('comments/update/', CommentUpdate.as_view(), name='comment-update'),
     path('comments/delete/<uuid:comment_id>/', CommentDelete.as_view(), name='comment-delete'),
     path('comments/restore/', RestoreComment.as_view(), name='comment-restore'),
 
@@ -75,6 +95,59 @@ urlpatterns = [
     path('sprints/ai-overview/analyze/', AISprintAnalysis.as_view(), name='ai-sprint-analysis'),
     path('sprints/ai-overview/create-tasks/', AICreateSprintTasks.as_view(), name='ai-create-tasks'),
 
-  
+    # --------------------------------------------------
+    # Epics
+    # --------------------------------------------------
+    path('epics/add/', EpicAdd.as_view(), name='epic-add'),
+
+    # --------------------------------------------------
+    # Workflow Configuration (OWNER / ADMIN)
+    # --------------------------------------------------
+    path('workflow/details/', WorkflowDetails.as_view(), name='workflow-details'),
+    path('workflow/status/save/', WorkflowStatusUpsert.as_view(), name='workflow-status-upsert'),
+    path('workflow/status/delete/<uuid:status_id>/', WorkflowStatusDelete.as_view(), name='workflow-status-delete'),
+    path('workflow/transition/save/', WorkflowTransitionUpsert.as_view(), name='workflow-transition-upsert'),
+    path('workflow/transition/delete/<uuid:transition_id>/', WorkflowTransitionDelete.as_view(), name='workflow-transition-delete'),
+
+
+    path('task/status-timeline/', TaskStatusTimeline.as_view(), name='task-status-timeline'),
+
+    # --------------------------------------------------
+    # Sprint Planning
+    # --------------------------------------------------
+    path("sprint/task/add/", AddTaskToSprint.as_view()),
+    path("sprint/task/remove/", RemoveTaskFromSprint.as_view()),
+    path("sprint/task/bulk-add/", BulkAddTasksToSprint.as_view()),
+
+    # --------------------------------------------------
+    # Sprint Reports
+    # --------------------------------------------------
+    path('sprint/summary/reports/', SprintSummaryReport.as_view()),
+    path('sprint/reports/assignees/', SprintAssigneeReport.as_view()),
+    path('sprint/reports/spillover/', SprintSpilloverReport.as_view()),
+    path('sprints/burndown/', SprintBurndownView.as_view()),
+    path('sprints/status-breakdown/', SprintStatusBreakdownReport.as_view()),
+    path('sprints/velocity/', SprintVelocityView.as_view()),
+    path('sprints/scope-change/', SprintScopeChangeView.as_view()),
+    path('sprints/assignee-workload/', SprintAssigneeWorkloadView.as_view()),
+
+    # --------------------------------------------------
+    # Sprint Settings
+    # --------------------------------------------------
+
+    path("sprint/settings/details/", SprintSettingsDetails.as_view()),
+    path("sprint/settings/update/", SprintSettingsUpdate.as_view()),
+    path("sprint/settings/start/", SprintStart.as_view()),
+    path("sprint/settings/complete/", SprintComplete.as_view()),
+    path("sprint/settings/delete/", SprintDelete.as_view()),
+
+    # --------------------------------------------------
+    # Sprint AI
+    # --------------------------------------------------
+
+    path("sprint/ai/explanation/", SprintAIExplanationView.as_view() ),
+    path("sprint/ai/trend/", SprintAITrendView.as_view())
+
+
 
 ]
