@@ -1,5 +1,7 @@
 from django.urls import path
 from .views.hr_management_views import *
+from .views.manager_view import *
+from .views.employee_view import *
 
 urlpatterns = [
     path('employees/add/', EmployeeAdd.as_view(), name='employee-add'),
@@ -12,8 +14,9 @@ urlpatterns = [
     path('employees/attendance/summary/', AttendanceSummary.as_view(), name='attendance-summary'),
     path('employees/birthdays/list/', BirthdayList.as_view(), name='birthday-summary'),    
     path('employee/attendance/list/', EmployeeAttendanceList.as_view(), name='employee-attendance-list'),
+    path("employees/search/", EmployeeSearchView.as_view()),
 
-    path('manager/list/', ManagerList.as_view(), name='employee-list'),
+    # path('manager/list/', ManagerList.as_view(), name='employee-list'),
     path('manager/dashboard-metrics/', ManagerDashboardMetrics.as_view(), name='manager-dashboard-metrics'),    
     path('managers/available/', GetAvailableManagers.as_view(), name='get_available_managers'),
 
@@ -36,5 +39,9 @@ urlpatterns = [
     # Add this line to urlpatterns in urls.py
     path('hr/dashboard-metrics/', HRDashboardMetrics.as_view(), name='hr-dashboard-metrics'),
     path("attendance/summary/", AttendanceSummaryView.as_view()),
+
+    path('employee/dashboard/metrics/', EmployeeDashboardMetrics.as_view(), name='employee-dashboard-metrics'
+),
+
 
 ]

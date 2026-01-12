@@ -13,11 +13,8 @@ from projects.models.comments_model import Comment
 from projects.serializers.sprint_serializer import SprintSerializer
 from projects.models.task_model import TaskStatusHistory
 from projects.utils.sprint_ai_utils import calculate_sprint_ai_completion
-from projects.utils.permissions import (
-    require_project_viewer,
-    require_project_manager,
-    require_project_owner,
-)
+from projects.utils.permissions import *
+from projects.utils.sprint_capacity_service import calculate_sprint_capacity
 
 # ------------------------------------------------------------------
 # Sprint List (READ)
@@ -288,3 +285,26 @@ class SprintEnd(APIView):
                 {"status": False, "message": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+
+class SprintCapacityView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        sprint_id = request.data.get("sprint_id")
+
+        sprint = Sprint.objects.select_related("project").filter(id=sprint_id).first()
+        if not sprint:
+            return Response(
+                {"status": False, "message": "Sprint not found"},
+                status=200
+            )
+
+        require_project_viewer(request.user, sprint.project)
+
+        data = calculate_sprint_capacity(sprint)
+
+        return Response({
+            "status": True,
+            "records": data
+        }, status=200)

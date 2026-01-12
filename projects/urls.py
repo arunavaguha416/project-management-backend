@@ -12,6 +12,8 @@ from .views.task_status_history_views import *
 from .views.epic_views import *
 from projects.views.sprint_planning_views import *
 from projects.views.sprint_reports_views import *
+from projects.views.sprint_health_views import *
+from projects.views.project_teams_view import *
 
 
 urlpatterns = [
@@ -73,6 +75,8 @@ urlpatterns = [
     path('sprints/start/', SprintStart.as_view()),
     path('sprints/end/', SprintEnd.as_view()),
     path('task/update/properties/', TaskUpdateProperties.as_view()),
+    path("sprint/capacity/", SprintCapacityView.as_view()),
+
 
 
 
@@ -115,9 +119,11 @@ urlpatterns = [
     # --------------------------------------------------
     # Sprint Planning
     # --------------------------------------------------
-    path("sprint/task/add/", AddTaskToSprint.as_view()),
-    path("sprint/task/remove/", RemoveTaskFromSprint.as_view()),
+    path("sprint/planning/add-task/", AddTaskToSprint.as_view()),
+    path("sprint/planning/remove-task/", RemoveTaskFromSprint.as_view()),
     path("sprint/task/bulk-add/", BulkAddTasksToSprint.as_view()),
+    path("sprint/ai-plan/", SprintPlanSuggestionView.as_view()),
+
 
     # --------------------------------------------------
     # Sprint Reports
@@ -146,7 +152,19 @@ urlpatterns = [
     # --------------------------------------------------
 
     path("sprint/ai/explanation/", SprintAIExplanationView.as_view() ),
-    path("sprint/ai/trend/", SprintAITrendView.as_view())
+    path("sprint/ai/trend/", SprintAITrendView.as_view()),
+
+
+    path("sprints/health/", SprintHealthReport.as_view()),
+
+
+    # --------------------------------------------------
+    # Project Team
+    # --------------------------------------------------
+    path("team/list/", ProjectTeamList.as_view()),
+    path("team/add/", ProjectTeamAdd.as_view()),
+    path("team/update-role/", ProjectTeamUpdateRole.as_view()),
+    path("team/remove/", ProjectTeamRemove.as_view()),
 
 
 

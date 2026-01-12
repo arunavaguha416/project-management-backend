@@ -244,7 +244,48 @@ class RestoreEmployee(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
+class EmployeeSearchView(APIView):
+    permission_classes = (IsAuthenticated,)
 
+    def post(self, request):
+        try:
+            query = request.data.get("query", "").strip()
+
+            if not query or len(query) < 2:
+                return Response(
+                    {"status": True, "records": []},
+                    status=200
+                )
+
+            users = (
+                User.objects
+                .filter(
+                    Q(name__icontains=query) |
+                    Q(email__icontains=query)
+                )
+                .filter(is_active=True)
+                .order_by("name")[:10]
+            )
+
+            records = [
+                {
+                    "id": str(u.id),
+                    "name": u.name,
+                    "email": u.email
+                }
+                for u in users
+            ]
+
+            return Response(
+                {"status": True, "records": records},
+                status=200
+            )
+
+        except Exception as e:
+            return Response(
+                {"status": False, "message": str(e)},
+                status=400
+            )
 
 
 # --- 3. Attendance Summary ---
@@ -595,87 +636,6 @@ class EmployeeProjectList(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
         
 
-class ManagerList(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request):
-        try: 
-            # Fix 1: Properly assign the Q object to query
-            # Fix 2: Correct 'icontain' to 'icontains'
-            # Fix 3: Use &= to apply the filter to query
-            query = Q(user__role__icontains="MANAGER")
-
-            employees = Employee.objects.filter(query).order_by('-created_at')
-
-            if employees.exists():               
-                serializer = EmployeeSerializer(employees, many=True)
-                return Response({
-                    'status': True,                    
-                    'records': serializer.data
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': False,
-                    'message': 'No managers found',
-                    'count': 0,
-                    'records': []
-                }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-
-class ManagerDashboardMetrics(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        try:
-            user = request.user
-            employee = Employee.objects.filter(user=user).first()
-            
-            if not employee:
-                return Response({
-                    'status': False,
-                    'message': 'Employee record not found'
-                }, status=status.HTTP_404_NOT_FOUND)
-            
-            # Get projects managed by this manager
-            managed_projects = Project.objects.filter(manager=employee)
-            
-            # Get teams for managed projects
-            teams_for_managed_projects = Team.objects.filter(
-                project_id__in=managed_projects
-            ).distinct()
-            
-            # Count unique team members across all managed project teams
-            team_members_count = TeamMembersMapping.objects.filter(
-                team__in=teams_for_managed_projects
-            ).values('user').distinct().count()
-            
-            # Count pending leave requests (placeholder)
-            pending_leaves = 0  # Update when leave management is implemented
-            
-            metrics = {
-                'total_projects': managed_projects.count(),
-                'active_projects': managed_projects.filter(status='Ongoing').count(),
-                'completed_projects': managed_projects.filter(status='Completed').count(),
-                'team_size': team_members_count,
-                'pending_leaves': pending_leaves
-            }
-            
-            return Response({
-                'status': True,
-                'data': metrics
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'Error fetching dashboard metrics',
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
 
         
 

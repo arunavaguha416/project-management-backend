@@ -5,6 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
 from django.core.paginator import Paginator
 
+from authentication.models.user import User
+from projects.models.epic_model import Epic
 from projects.models.task_model import Task
 from projects.models.project_model import Project
 from projects.models.sprint_model import Sprint
@@ -155,18 +157,122 @@ class TaskDetails(APIView):
 
     def post(self, request):
         try:
-            task_id = request.data.get('id')
-            task = Task.objects.select_related('project').filter(id=task_id).first()
-            if not task:
-                return Response({'status': False, 'message': 'Task not found'}, status=status.HTTP_200_OK)
+            task_id = request.data.get("id")
+            if not task_id:
+                return Response(
+                    {"status": False, "message": "id (task_id) is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
+            task = Task.objects.select_related(
+                "project",
+                "sprint",
+                "assigned_to",
+                "epic",
+                "parent"
+            ).filter(id=task_id).first()
+
+            if not task:
+                return Response(
+                    {"status": False, "message": "Task not found"},
+                    status=status.HTTP_200_OK
+                )
+
+            # 🔐 RBAC
             require_project_viewer(request.user, task.project)
 
-            serializer = TaskSerializer(task)
-            return Response({'status': True, 'records': serializer.data}, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    "status": True,
+                    "records": {
+                        # -----------------------------
+                        # CORE
+                        # -----------------------------
+                        "id": str(task.id),
+                        "title": task.title,
+                        "description": task.description,
+                        "status": task.status,
+                        "priority": task.priority,
+                        "task_type": task.task_type,
+
+                        # -----------------------------
+                        # PROJECT / SPRINT
+                        # -----------------------------
+                        "project": {
+                            "id": str(task.project.id),
+                            "name": task.project.name,
+                        },
+                        "sprint": (
+                            {
+                                "id": str(task.sprint.id),
+                                "name": task.sprint.name,
+                                "start_date": task.sprint.start_date,
+                                "end_date": task.sprint.end_date,
+                                "status": task.sprint.status,
+                            }
+                            if task.sprint else None
+                        ),
+
+                        # -----------------------------
+                        # ASSIGNEE
+                        # -----------------------------
+                        "assigned_to": (
+                            {
+                                "id": str(task.assigned_to.id),
+                                "name": task.assigned_to.name,
+                                "email": task.assigned_to.email,
+                            }
+                            if task.assigned_to else None
+                        ),
+
+                        # -----------------------------
+                        # EPIC / HIERARCHY
+                        # -----------------------------
+                        "epic": (
+                            {
+                                "id": str(task.epic.id),
+                                "name": task.epic.name,
+                                "color": task.epic.color,
+                            }
+                            if task.epic else None
+                        ),
+                        "parent": (
+                            {
+                                "id": str(task.parent.id),
+                                "title": task.parent.title,
+                            }
+                            if task.parent else None
+                        ),
+
+                        # -----------------------------
+                        # PLANNING FIELDS
+                        # -----------------------------
+                        "story_points": task.story_points,
+                        "due_date": task.due_date,
+                        "labels": task.labels,
+                        "progress_percentage": task.progress_percentage,
+
+                        # -----------------------------
+                        # TIME TRACKING
+                        # -----------------------------
+                        "time_estimate": task.time_estimate,
+                        "time_logged": task.time_logged,
+
+                        # -----------------------------
+                        # META
+                        # -----------------------------
+                        "created_at": task.created_at,
+                        "updated_at": task.updated_at,
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
 
         except Exception as e:
-            return Response({'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"status": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 # ------------------------------------------------------------------
@@ -263,25 +369,163 @@ class TaskAdd(APIView):
 class TaskUpdateDetails(APIView):
     permission_classes = (IsAuthenticated,)
 
-    def put(self, request):
+    def post(self, request):
         try:
-            task = Task.objects.select_related('project').filter(id=request.data.get('id')).first()
-            if not task:
-                return Response({'status': False, 'message': 'Task not found'}, status=status.HTTP_200_OK)
+            data = request.data
+            task_id = data.get("id")
 
+            if not task_id:
+                return Response(
+                    {"status": False, "message": "Task id is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            task = Task.objects.select_related(
+                "project", "sprint", "assigned_to", "epic"
+            ).filter(id=task_id).first()
+
+            if not task:
+                return Response(
+                    {"status": False, "message": "Task not found"},
+                    status=status.HTTP_200_OK
+                )
+
+            # 🔐 RBAC
             require_project_editor(request.user, task.project)
 
-            serializer = TaskSerializer(task, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({'status': True, 'message': 'Task updated successfully'},
-                                status=status.HTTP_200_OK)
+            # --------------------------------------------------
+            # SIMPLE FIELD UPDATES
+            # --------------------------------------------------
+            if "title" in data:
+                task.title = data.get("title")
 
-            return Response({'status': False, 'message': 'Invalid data', 'errors': serializer.errors},
-                            status=status.HTTP_400_BAD_REQUEST)
+            if "description" in data:
+                task.description = data.get("description")
+
+            if "status" in data:
+                task.status = data.get("status")
+
+            if "priority" in data:
+                task.priority = data.get("priority")
+
+            if "story_points" in data:
+                task.story_points = data.get("story_points")
+
+            if "due_date" in data:
+                task.due_date = data.get("due_date")
+
+            if "progress_percentage" in data:
+                task.progress_percentage = data.get("progress_percentage")
+
+            if "labels" in data:
+                task.labels = data.get("labels", [])
+
+            # --------------------------------------------------
+            # RELATION FIELDS (validated)
+            # --------------------------------------------------
+            if "assigned_to" in data:
+                user_id = data.get("assigned_to")
+                if user_id:
+                    user = User.objects.filter(id=user_id).first()
+                    if not user:
+                        return Response(
+                            {"status": False, "message": "Invalid assignee"},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    task.assigned_to = user
+                else:
+                    task.assigned_to = None
+
+            if "sprint" in data:
+                sprint_id = data.get("sprint")
+                if sprint_id:
+                    sprint = Sprint.objects.filter(
+                        id=sprint_id,
+                        project=task.project
+                    ).first()
+                    if not sprint:
+                        return Response(
+                            {"status": False, "message": "Invalid sprint"},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    task.sprint = sprint
+                else:
+                    task.sprint = None
+
+            if "epic" in data:
+                epic_id = data.get("epic")
+                if epic_id:
+                    epic = Epic.objects.filter(
+                        id=epic_id,
+                        project=task.project
+                    ).first()
+                    if not epic:
+                        return Response(
+                            {"status": False, "message": "Invalid epic"},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    task.epic = epic
+                else:
+                    task.epic = None
+
+            # --------------------------------------------------
+            # SAVE
+            # --------------------------------------------------
+            task.save()
+
+            # --------------------------------------------------
+            # RETURN UPDATED DATA (IMPORTANT)
+            # --------------------------------------------------
+            updated_task = Task.objects.select_related(
+                "project", "sprint", "assigned_to", "epic"
+            ).get(id=task.id)
+
+            return Response(
+                {
+                    "status": True,
+                    "message": "Task updated successfully",
+                    "records": {
+                        "id": str(updated_task.id),
+                        "title": updated_task.title,
+                        "description": updated_task.description,
+                        "status": updated_task.status,
+                        "priority": updated_task.priority,
+                        "story_points": updated_task.story_points,
+                        "due_date": updated_task.due_date,
+                        "labels": updated_task.labels,
+                        "progress_percentage": updated_task.progress_percentage,
+                        "assigned_to": (
+                            {
+                                "id": str(updated_task.assigned_to.id),
+                                "name": updated_task.assigned_to.name
+                            }
+                            if updated_task.assigned_to else None
+                        ),
+                        "sprint": (
+                            {
+                                "id": str(updated_task.sprint.id),
+                                "name": updated_task.sprint.name
+                            }
+                            if updated_task.sprint else None
+                        ),
+                        "epic": (
+                            {
+                                "id": str(updated_task.epic.id),
+                                "name": updated_task.epic.name
+                            }
+                            if updated_task.epic else None
+                        ),
+                        "updated_at": updated_task.updated_at,
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
 
         except Exception as e:
-            return Response({'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"status": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 # ------------------------------------------------------------------
