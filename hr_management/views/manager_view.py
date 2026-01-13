@@ -15,8 +15,6 @@ from hr_management.models.hr_management_models import (
 from hr_management.serializers.hr_management_serializer import EmployeeSerializer
 from projects.models.project_model import Project
 from projects.models.sprint_model import Sprint
-from teams.models.team_members_mapping import TeamMembersMapping
-from teams.models.team_model import Team
 
 
 
@@ -65,16 +63,12 @@ class ManagerDashboardMetrics(APIView):
             # -------------------------------------------------
             # Teams under managed projects
             # -------------------------------------------------
-            teams = Team.objects.filter(
-                project_id__in=managed_project_ids
-            )
+            teams = []
 
             # -------------------------------------------------
             # Team members (ONLY via TeamMembersMapping)
             # -------------------------------------------------
-            team_user_ids = TeamMembersMapping.objects.filter(
-                team__in=teams
-            ).values_list('user_id', flat=True).distinct()
+            team_user_ids = []
 
             team_employees = Employee.objects.filter(
                 user_id__in=team_user_ids,

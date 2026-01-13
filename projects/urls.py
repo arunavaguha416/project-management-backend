@@ -6,7 +6,6 @@ from .views.projects_views import *
 from .views.task_views import *
 from .views.comment_view import *
 from .views.sprint_views import *
-from .views.ai_views import *
 from .views.workflow_views import *
 from .views.task_status_history_views import *
 from .views.epic_views import *
@@ -49,8 +48,7 @@ urlpatterns = [
     # --------------------------------------------------
     # Project files
     # --------------------------------------------------
-    path('files/upload/', UploadProjectFiles.as_view(), name='upload-project-files'),
-    path('files/list/', ProjectFilesList.as_view(), name='project-files-list'),
+ 
 
     # --------------------------------------------------
     # Project finance
@@ -96,8 +94,6 @@ urlpatterns = [
     path('comments/restore/', RestoreComment.as_view(), name='comment-restore'),
 
 
-    path('sprints/ai-overview/analyze/', AISprintAnalysis.as_view(), name='ai-sprint-analysis'),
-    path('sprints/ai-overview/create-tasks/', AICreateSprintTasks.as_view(), name='ai-create-tasks'),
 
     # --------------------------------------------------
     # Epics
@@ -165,6 +161,8 @@ urlpatterns = [
     path("team/add/", ProjectTeamAdd.as_view()),
     path("team/update-role/", ProjectTeamUpdateRole.as_view()),
     path("team/remove/", ProjectTeamRemove.as_view()),
+    path("team/users/list/", UserList.as_view()),
+
 
 
 

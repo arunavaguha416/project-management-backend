@@ -1,9 +1,27 @@
 from django.db import models
+from authentication.models.user import User
 from hr_management.models.hr_management_models import Employee
 from django.utils.translation import gettext_lazy as _
 from project_management.softDeleteModel import SoftDeletionModel
 import uuid
 from company.models.company_model import Company
+import os
+from datetime import datetime
+
+def project_file_upload_path(instance, filename):
+    """
+    project_files/<project_id>/<year>/<month>/<day>/<filename>
+    """
+    today = datetime.today()
+
+    return os.path.join(
+        'project_files',
+        str(instance.project.id),
+        str(today.year),
+        f"{today.month:02d}",
+        f"{today.day:02d}",
+        filename
+    )
 
 class Project(SoftDeletionModel):
     class projectStatus(models.TextChoices):
@@ -76,7 +94,10 @@ class Milestone(models.Model):
         ('COMPLETED', 'Completed'),
         ('CANCELLED', 'Cancelled'),
     ]
-    
+    id = models.UUIDField(primary_key=True, 
+                        default=uuid.uuid4, 
+                        editable=False, 
+                        unique=True)    
     title = models.CharField(max_length=200)
     name = models.CharField(max_length=200, blank=True)  # Alternative field name
     description = models.TextField(blank=True)
@@ -94,15 +115,25 @@ class Milestone(models.Model):
         verbose_name_plural = "Milestones"
 
 
-class ProjectFile(SoftDeletionModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='files')
-    file = models.FileField(upload_to='project_files/%Y/%m/%d/')
-    filename = models.CharField(max_length=255, blank=True)
-    extension = models.CharField(max_length=16, blank=True)
-    size = models.PositiveIntegerField(default=0)
-    uploaded_by = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True)
+class ProjectFile(models.Model):
+    id = models.UUIDField(primary_key=True, 
+                        default=uuid.uuid4, 
+                        editable=False, 
+                        unique=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE,null=True)
+    file = models.FileField(upload_to=project_file_upload_path,null=True)
+    name = models.CharField(max_length=255,null=True)
+    size = models.PositiveIntegerField(null=True)
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
 
     class Meta:
         verbose_name = "ProjectFile"

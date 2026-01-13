@@ -23,10 +23,10 @@ urlpatterns = [
     path('api/projects/', include('projects.urls')),
     path('api/discussions/', include('discussions.urls')),
     path('api/hr-management/', include('hr_management.urls')),
-    path('api/teams/', include('teams.urls')),
+    
     path('api/time-tracking/', include('time_tracking.urls')),
     path('api/department/', include('department.urls')),
     path('api/company/', include('company.urls')),
     path('api/payroll/', include('payroll.urls')),
-    path('api/ai/', include('ai_insights.urls')),
+    
 ]

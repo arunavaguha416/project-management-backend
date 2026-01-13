@@ -13,8 +13,6 @@ from hr_management.models.hr_management_models import (
     LeaveBalance
 )
 
-from teams.models.team_model import Team
-from teams.models.team_members_mapping import TeamMembersMapping
 
 from projects.models.sprint_model import Sprint
 from projects.models.task_model import Task
@@ -94,9 +92,7 @@ class EmployeeDashboardMetrics(APIView):
             # -------------------------------------------------
             # Projects → Active Sprint
             # -------------------------------------------------
-            teams = Team.objects.filter(
-                teammembersmapping__user_id=request.user.id
-            ).distinct()
+            teams = []
 
             project_ids = teams.values_list('project_id', flat=True)
 

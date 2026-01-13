@@ -48,120 +48,116 @@ class ProjectAdd(APIView):
         try:
             data = request.data.copy()
 
+            # -------------------------------------------------
+            # Resolve company from logged-in user
+            # -------------------------------------------------
+            creator_employee = Employee.objects.filter(user=request.user).first()
+            if not creator_employee:
+                return Response(
+                    {'status': False, 'message': 'Employee record not found'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            company = creator_employee.company
+
+            # -------------------------------------------------
+            # Resolve manager (Employee)
+            # -------------------------------------------------
             manager = None
             manager_id = data.get('manager_id')
-            if manager_id and manager_id.strip():
-                manager = Employee.objects.filter(id=manager_id).first()
-                if not manager:
-                    return Response({
-                        'status': False,
-                        'message': f'Manager with ID {manager_id} not found in employee records'
-                    }, status=status.HTTP_400_BAD_REQUEST)
+            if manager_id:
+                manager = Employee.objects.filter(
+                    id=manager_id,
+                    company=company
+                ).first()
 
-            # -------------------------------
-            # Create Project (existing logic)
-            # -------------------------------
+                if not manager:
+                    return Response(
+                        {'status': False, 'message': 'Invalid manager'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # -------------------------------------------------
+            # Create project
+            # -------------------------------------------------
             project = Project.objects.create(
                 name=data.get('name'),
                 description=data.get('description'),
-                manager=manager,
+                manager=manager
             )
 
-            # -------------------------------
+            # -------------------------------------------------
             # Creator becomes OWNER
-            # -------------------------------
-            ProjectMember.objects.get_or_create(
+            # -------------------------------------------------
+            ProjectMember.objects.create(
                 project=project,
                 user=request.user,
-                defaults={'role': 'OWNER'}
+                role='OWNER'
             )
 
-            # ============================================================
-            # 🔥 DEFAULT WORKFLOW CREATION (NEW, NON-BREAKING)
-            # ============================================================
+            # -------------------------------------------------
+            # Team members (optional)
+            # -------------------------------------------------
+            team_members = data.get('team_members', [])
+
+            for member in team_members:
+                user_id = member.get('user_id')
+                role = member.get('role', 'MEMBER')
+
+                user = User.objects.filter(id=user_id).first()
+                employee = Employee.objects.filter(
+                    user=user,
+                    company=company
+                ).first()
+
+                if not user or not employee:
+                    continue
+
+                ProjectMember.objects.update_or_create(
+                    project=project,
+                    user=user,
+                    defaults={
+                        'role': role,
+                        'is_active': True
+                    }
+                )
+
+            # -------------------------------------------------
+            # DEFAULT WORKFLOW (UNCHANGED)
+            # -------------------------------------------------
             workflow = Workflow.objects.create(
                 project=project,
                 name='Default Workflow'
             )
 
-            todo = WorkflowStatus.objects.create(
-                workflow=workflow,
-                key='TODO',
-                label='To Do',
-                order=1
-            )
-
-            in_progress = WorkflowStatus.objects.create(
-                workflow=workflow,
-                key='IN_PROGRESS',
-                label='In Progress',
-                order=2
-            )
-
-            in_review = WorkflowStatus.objects.create(
-                workflow=workflow,
-                key='IN_REVIEW',
-                label='In Review',
-                order=3
-            )
-
-            done = WorkflowStatus.objects.create(
-                workflow=workflow,
-                key='DONE',
-                label='Done',
-                order=4,
-                is_terminal=True
-            )
+            todo = WorkflowStatus.objects.create(workflow=workflow, key='TODO', label='To Do', order=1)
+            in_progress = WorkflowStatus.objects.create(workflow=workflow, key='IN_PROGRESS', label='In Progress', order=2)
+            in_review = WorkflowStatus.objects.create(workflow=workflow, key='IN_REVIEW', label='In Review', order=3)
+            done = WorkflowStatus.objects.create(workflow=workflow, key='DONE', label='Done', order=4, is_terminal=True)
 
             WorkflowTransition.objects.bulk_create([
-                WorkflowTransition(
-                    workflow=workflow,
-                    from_status=todo,
-                    to_status=in_progress,
-                    allowed_roles=['OWNER', 'MANAGER', 'MEMBER']
-                ),
-                WorkflowTransition(
-                    workflow=workflow,
-                    from_status=in_progress,
-                    to_status=in_review,
-                    allowed_roles=['OWNER', 'MANAGER'],
-                    require_assignee=True
-                ),
-                WorkflowTransition(
-                    workflow=workflow,
-                    from_status=in_review,
-                    to_status=done,
-                    allowed_roles=['OWNER', 'MANAGER'],
-                    require_comment=True
-                ),
+                WorkflowTransition(workflow=workflow, from_status=todo, to_status=in_progress,
+                                   allowed_roles=['OWNER', 'MANAGER', 'MEMBER']),
+                WorkflowTransition(workflow=workflow, from_status=in_progress, to_status=in_review,
+                                   allowed_roles=['OWNER', 'MANAGER'], require_assignee=True),
+                WorkflowTransition(workflow=workflow, from_status=in_review, to_status=done,
+                                   allowed_roles=['OWNER', 'MANAGER'], require_comment=True),
             ])
-
-            # -------------------------------
-            # Response (UNCHANGED)
-            # -------------------------------
-            project_data = {
-                'id': str(project.id),
-                'name': project.name,
-                'description': project.description,
-                'manager_id': str(project.manager.id) if project.manager else None,
-                'manager_name': project.manager.user.name if project.manager and project.manager.user else None,
-                'status': project.status,
-                'created_at': project.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'updated_at': project.updated_at.strftime('%Y-%m-%d %H:%M:%S')
-            }
 
             return Response({
                 'status': True,
-                'message': 'Project added successfully',
-                'records': project_data
+                'records': {
+                    'id': str(project.id),
+                    'name': project.name
+                }
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            return Response({
-                'status': False,
-                'message': 'An error occurred while adding the project',
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'status': False, 'message': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
 
 # ------------------------------------------------------------------
 # Project List
@@ -303,31 +299,37 @@ class ProjectDetails(APIView):
 
             require_project_viewer(request.user, project)
 
+            members = ProjectMember.objects.filter(
+                project=project,
+                is_active=True
+            ).select_related('user')
+
+            team_data = [{
+                'user': {
+                    'id': str(m.user.id),
+                    'name': m.user.name,
+                    'email': m.user.email
+                },
+                'role': m.role
+            } for m in members]
+
             data = {
                 'id': str(project.id),
                 'name': project.name,
                 'description': project.description,
+                'manager_id': project.manager.id if project.manager else None,
                 'manager_name': project.manager.user.name if project.manager else None,
-                'manager_id': project.manager.user.id if project.manager else None,
                 'start_date': project.start_date,
                 'end_date': project.end_date,
                 'status': project.status,
-                'client_name': getattr(project, 'client_name', None),
-                'current_sprint': getattr(project, 'current_sprint', None),
+                'team_members': team_data
             }
 
-            tasks = Task.objects.filter(project=project)
-            task_data = [{
-                'id': t.id,
-                'title': t.title,
-                'assigned_to_name': t.assigned_to.name if t.assigned_to else None,
-                'status': t.status
-            } for t in tasks]
-
-            return Response({'status': True, 'records': data, 'tasks': task_data})
+            return Response({'status': True, 'records': data})
 
         except Exception as e:
             return Response({'status': False, 'error': str(e)}, status=400)
+
 
 # ------------------------------------------------------------------
 # Project Update
@@ -339,21 +341,69 @@ class ProjectUpdate(APIView):
         try:
             project = Project.objects.filter(id=request.data.get('id')).first()
             if not project:
-                return Response({'status': False, 'message': 'Project not found'}, status=status.HTTP_200_OK)
+                return Response({'status': False, 'message': 'Project not found'}, status=404)
 
             require_project_manager(request.user, project)
 
-            serializer = ProjectSerializer(project, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({'status': True, 'message': 'Project updated successfully'},
-                                status=status.HTTP_200_OK)
+            employee = Employee.objects.filter(user=request.user).first()
+            company = employee.company
 
-            return Response({'status': False, 'message': 'Invalid data', 'errors': serializer.errors},
-                            status=status.HTTP_400_BAD_REQUEST)
+            # ---------------- Manager ----------------
+            manager_id = request.data.get('manager_id')
+            if manager_id:
+                manager = Employee.objects.filter(
+                    id=manager_id,
+                    company=company
+                ).first()
+                project.manager = manager
+
+            # ---------------- Basic fields ----------------
+            project.name = request.data.get('name', project.name)
+            project.description = request.data.get('description', project.description)
+            project.start_date = request.data.get('start_date', project.start_date)
+            project.end_date = request.data.get('end_date', project.end_date)
+            project.save()
+
+            # ---------------- Team update ----------------
+            incoming = request.data.get('team_members', [])
+            incoming_user_ids = []
+
+            for member in incoming:
+                user_id = member.get('user_id')
+                role = member.get('role', 'MEMBER')
+                user = User.objects.filter(id=user_id).first()
+
+                if not user:
+                    continue
+
+                incoming_user_ids.append(user.id)
+
+                ProjectMember.objects.update_or_create(
+                    project=project,
+                    user=user,
+                    defaults={'role': role, 'is_active': True}
+                )
+
+            # deactivate removed members (except OWNER)
+            ProjectMember.objects.filter(
+                project=project
+            ).exclude(
+                user__id__in=incoming_user_ids
+            ).exclude(
+                role='OWNER'
+            ).update(is_active=False)
+
+            return Response(
+                {'status': True, 'message': 'Project updated successfully'},
+                status=status.HTTP_200_OK
+            )
 
         except Exception as e:
-            return Response({'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'status': False, 'message': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
 
 # ------------------------------------------------------------------
 # Project Delete
@@ -492,6 +542,8 @@ class AssignProjectManager(APIView):
         except Exception as e:
             return Response({'status': False, 'message': str(e)},
                             status=status.HTTP_400_BAD_REQUEST)
+
+
 class EmployeeProjectList(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -517,6 +569,8 @@ class EmployeeProjectList(APIView):
         except Exception as e:
             return Response({'status': False, 'message': str(e)},
                             status=status.HTTP_400_BAD_REQUEST)
+
+
 class ProjectTasksList(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -612,80 +666,7 @@ class ManagerProjectList(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
 
-class UploadProjectFiles(APIView):
-    permission_classes = (IsAuthenticated,)
 
-    def post(self, request):
-        try:
-            project = Project.objects.filter(
-                id=request.data.get('project_id')
-            ).first()
-
-            if not project:
-                return Response({'status': False, 'message': 'Project not found'},
-                                status=status.HTTP_200_OK)
-
-            require_project_manager(request.user, project)
-
-            # Storage integration placeholder
-            return Response({
-                'status': True,
-                'message': 'File uploaded successfully'
-            }, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            return Response({'status': False, 'message': str(e)},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-class UploadProjectFiles(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request):
-        try:
-            project = Project.objects.filter(
-                id=request.data.get('project_id')
-            ).first()
-
-            if not project:
-                return Response({'status': False, 'message': 'Project not found'},
-                                status=status.HTTP_200_OK)
-
-            require_project_manager(request.user, project)
-
-            # Storage integration placeholder
-            return Response({
-                'status': True,
-                'message': 'File uploaded successfully'
-            }, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            return Response({'status': False, 'message': str(e)},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-
-class ProjectFilesList(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request):
-        try:
-            project = Project.objects.filter(
-                id=request.data.get('project_id')
-            ).first()
-
-            if not project:
-                return Response({'status': False, 'message': 'Project not found'},
-                                status=status.HTTP_200_OK)
-
-            require_project_viewer(request.user, project)
-
-            return Response({
-                'status': True,
-                'records': []
-            }, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            return Response({'status': False, 'message': str(e)},
-                            status=status.HTTP_400_BAD_REQUEST)
 
 
 class GenerateProjectInvoice(APIView):

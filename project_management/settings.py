@@ -47,12 +47,11 @@ INSTALLED_APPS = [
     'discussions',
     'hr_management',
     'time_tracking',
-    'teams',
+    
     'corsheaders',
     'department',
     'company',
     'channels',
-    'ai_insights',
     'core',
     'payroll',
 ]

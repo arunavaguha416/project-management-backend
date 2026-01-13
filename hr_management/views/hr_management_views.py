@@ -13,8 +13,6 @@ from django.utils import timezone
 from projects.models.project_model import Project
 from authentication.models.user import User
 from hr_management.models.hr_management_models import Attendance
-from teams.models.team_model import Team
-from teams.models.team_members_mapping import TeamMembersMapping
 
 # Employee Views
 class EmployeeAdd(APIView):
@@ -856,9 +854,7 @@ class LeaveRequestsList(APIView):
                 managed_projects = Project.objects.filter(manager=manager_employee)
                 
                 # Get team members from managed projects
-                team_members_query = TeamMembersMapping.objects.filter(
-                    team__project_id__in=managed_projects
-                ).values_list('user_id', flat=True).distinct()
+                team_members_query = ''
                 
                 # Get employees who are team members or resources
                 team_employees = Employee.objects.filter(
@@ -1082,9 +1078,7 @@ class ApplyLeave(APIView):
                     manager_employee = Employee.objects.filter(user=user).first()
                     if manager_employee:
                         managed_projects = Project.objects.filter(manager=manager_employee)
-                        team_members = TeamMembersMapping.objects.filter(
-                            team__project_id__in=managed_projects
-                        ).values_list('user_id', flat=True)
+                        team_members = {}
                         
                         if target_employee.user_id not in team_members:
                             return Response({
@@ -1247,9 +1241,7 @@ class ApproveRejectLeave(APIView):
                 
                 # Check if employee is in manager's team
                 managed_projects = Project.objects.filter(manager=manager_employee)
-                team_members = TeamMembersMapping.objects.filter(
-                    team__project_id__in=managed_projects
-                ).values_list('user_id', flat=True)
+                team_members = {}
                 
                 is_team_member = (
                     leave_request.employee.user_id in team_members or
@@ -1463,9 +1455,7 @@ class EmployeeLeaveBalance(APIView):
                     }, status=status.HTTP_404_NOT_FOUND)
                 
                 managed_projects = Project.objects.filter(manager=manager_employee)
-                team_members = TeamMembersMapping.objects.filter(
-                    team__project_id__in=managed_projects
-                ).values_list('user_id', flat=True)
+                team_members = {}
                 
                 is_team_member = (
                     target_employee.user_id in team_members or

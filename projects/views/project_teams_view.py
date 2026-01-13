@@ -2,8 +2,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-
+from django.db.models import Q
 from authentication.models.user import User
+from hr_management.models.hr_management_models import Employee
 from projects.models.project_model import Project
 from projects.models.project_member_model import ProjectMember
 from projects.utils.permissions import (
@@ -266,5 +267,77 @@ class ProjectTeamRemove(APIView):
         except Exception as e:
             return Response(
                 {"status": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class UserList(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            search = request.data.get("search", "").strip()
+            limit = int(request.data.get("limit", 20))
+
+            # 🔐 Resolve employee from logged-in user
+            employee = (
+                Employee.objects
+                .filter(user=request.user, deleted_at__isnull=True)
+                .select_related("company")
+                .first()
+            )
+
+            if not employee or not employee.company:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Employee or company not found for user"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            company = employee.company
+
+            # 🔐 Fetch users belonging to same company
+            qs = (
+                User.objects
+                .filter(
+                    employee__company=company,
+                    employee__deleted_at__isnull=True,
+                    is_active=True
+                )
+                .distinct()
+            )
+
+            if search:
+                qs = qs.filter(
+                    Q(name__icontains=search) |
+                    Q(email__icontains=search)
+                )
+
+            users = qs.order_by("name")[:limit]
+
+            records = [{
+            "id": str(u.id),
+            "name": u.name,
+            "email": u.email,
+            "designation": u.role,  # 👈 REQUIRED
+            } for u in users]
+
+
+            return Response(
+                {
+                    "status": True,
+                    "records": records
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response(
+                {
+                    "status": False,
+                    "message": str(e)
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
