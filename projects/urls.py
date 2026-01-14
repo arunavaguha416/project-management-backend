@@ -13,7 +13,7 @@ from projects.views.sprint_planning_views import *
 from projects.views.sprint_reports_views import *
 from projects.views.sprint_health_views import *
 from projects.views.project_teams_view import *
-
+from projects.views.project_file_views import *
 
 urlpatterns = [
     path('add/', ProjectAdd.as_view(), name='project_add'),
@@ -74,6 +74,8 @@ urlpatterns = [
     path('sprints/end/', SprintEnd.as_view()),
     path('task/update/properties/', TaskUpdateProperties.as_view()),
     path("sprint/capacity/", SprintCapacityView.as_view()),
+
+    path('sprints/current/', GetCurrentSprint.as_view()), #for empty sprint
 
 
 
@@ -142,6 +144,7 @@ urlpatterns = [
     path("sprint/settings/start/", SprintStart.as_view()),
     path("sprint/settings/complete/", SprintComplete.as_view()),
     path("sprint/settings/delete/", SprintDelete.as_view()),
+    path("sprint/settings/create/", SprintCreate.as_view()),
 
     # --------------------------------------------------
     # Sprint AI
@@ -150,6 +153,10 @@ urlpatterns = [
     path("sprint/ai/explanation/", SprintAIExplanationView.as_view() ),
     path("sprint/ai/trend/", SprintAITrendView.as_view()),
 
+    # Convert AI preview → actual sprint + backlog tasks
+    path("sprints/ai/commit/", SprintAICommit.as_view()),
+    # Preview sprint tasks from uploaded documents without DB mutation
+    path("sprints/ai/preview/", SprintAIPreview.as_view()),
 
     path("sprints/health/", SprintHealthReport.as_view()),
 
@@ -164,6 +171,12 @@ urlpatterns = [
     path("team/users/list/", UserList.as_view()),
 
 
+    # projects/urls.py
+
+    path('files/upload', ProjectFileUpload.as_view()),
+    path('files/delete', ProjectFileDelete.as_view()),
+    path('files/list', ProjectFileList.as_view()),
+    path('files/download/<uuid:file_id>/', ProjectFileDownload.as_view(),),
 
 
 ]

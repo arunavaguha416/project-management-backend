@@ -186,3 +186,9 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# settings.py
+
+MEDIA_URL = '/project_files/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'project_files')
+BASE_URL = "http://127.0.0.1:8000"
+

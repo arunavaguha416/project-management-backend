@@ -1,16 +1,22 @@
 import os
+import uuid
+from django.utils.timezone import now
+from datetime import datetime
 from django.conf import settings
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 from rest_framework import status
-
 from projects.models.project_model import Project, ProjectFile
 from projects.utils.permissions import (
     require_project_viewer,
-    require_project_manager
+    require_project_manager,
+    require_project_editor,
+    require_project_manager_or_hr
 )
-
+from urllib.parse import urlparse
+from django.http import FileResponse
 
 
 class ProjectFileUpload(APIView):
@@ -22,45 +28,50 @@ class ProjectFileUpload(APIView):
             file = request.FILES.get('file')
 
             if not project_id or not file:
-                return Response(
-                    {'status': False, 'message': 'project_id and file are required'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'status': False, 'message': 'Invalid upload'}, status=400)
 
             project = Project.objects.filter(id=project_id).first()
             if not project:
-                return Response(
-                    {'status': False, 'message': 'Project not found'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
+                return Response({'status': False, 'message': 'Project not found'}, status=404)
 
-            require_project_manager(request.user, project)
+            require_project_editor(request.user, project)
+
+            today = now()
+            folder = os.path.join(
+                settings.MEDIA_ROOT,
+                'project_files',
+                str(project.id),
+                today.strftime('%Y'),
+                today.strftime('%m'),
+                today.strftime('%d')
+            )
+            os.makedirs(folder, exist_ok=True)
+
+            system_filename = f"{uuid.uuid4()}{os.path.splitext(file.name)[1]}"
+            file_path = os.path.join(folder, system_filename)
+
+            with open(file_path, 'wb+') as dest:
+                for chunk in file.chunks():
+                    dest.write(chunk)
 
             project_file = ProjectFile.objects.create(
                 project=project,
-                file=file,              # 🔥 saved into project_files/
-                name=file.name,
-                size=file.size,
-                uploaded_by=request.user
+                uploaded_by=request.user,
+                file_path=file_path,
+                original_name=file.name
             )
 
-            return Response({
-                'status': True,
-                'records': {
-                    'id': str(project_file.id),
-                    'name': project_file.name,
-                    'size': project_file.size,
-                    'path': project_file.file.name,   # relative path
-                    'url': project_file.file.url,     # /project_files/...
-                    'uploaded_at': project_file.created_at
-                }
-            }, status=status.HTTP_200_OK)
+            project_file.file_url = request.build_absolute_uri(
+                f"/api/projects/files/download/{project_file.id}/"
+            )
+            project_file.save()
+
+            return Response({'status': True}, status=200)
 
         except Exception as e:
-            return Response(
-                {'status': False, 'message': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'status': False, 'message': str(e)}, status=400)
+
+
 
 
 
@@ -118,39 +129,63 @@ class ProjectFileDelete(APIView):
     def post(self, request):
         try:
             file_id = request.data.get('file_id')
-            if not file_id:
-                return Response(
-                    {'status': False, 'message': 'file_id is required'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            file = ProjectFile.objects.select_related('project').filter(id=file_id).first()
 
-            project_file = ProjectFile.objects.select_related('project').filter(
-                id=file_id
-            ).first()
+            if not file:
+                return Response({'status': False, 'message': 'File not found'}, status=404)
 
-            if not project_file:
+            require_project_manager(request.user, file.project)
+
+            # 🔥 DELETE FILE SAFELY
+            if os.path.exists(file.file_path):
+                os.remove(file.file_path)
+
+            file.delete()
+
+            return Response({'status': True}, status=200)
+
+        except Exception as e:
+            return Response({'status': False, 'message': str(e)}, status=400)
+
+
+
+class ProjectFileDownload(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, file_id):
+        try:
+            file = ProjectFile.objects.select_related('project').filter(id=file_id).first()
+            if not file:
                 return Response(
                     {'status': False, 'message': 'File not found'},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            require_project_manager(request.user, project_file.project)
+            project = file.project
 
-            # 🔥 Django deletes file from filesystem automatically
-            project_file.file.delete(save=False)
-            project_file.delete()
+            # 🔒 Permission check
+            require_project_editor(request.user, project)
 
-            return Response(
-                {'status': True, 'message': 'File deleted successfully'},
-                status=status.HTTP_200_OK
+            # 🔒 File existence
+            if not file.file_path or not os.path.exists(file.file_path):
+                return Response(
+                    {'status': False, 'message': 'File missing on server'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # ✅ Stream file
+            response = FileResponse(
+                open(file.file_path, 'rb'),
+                as_attachment=True,
+                filename=file.original_name
             )
+
+            return response
 
         except Exception as e:
             return Response(
                 {'status': False, 'message': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-
 
 

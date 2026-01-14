@@ -45,7 +45,13 @@ class Project(SoftDeletionModel):
     priority = models.CharField(max_length=20, choices=[
         ('LOW', 'Low'), ('MEDIUM', 'Medium'), ('HIGH', 'High'), ('CRITICAL', 'Critical')
     ], default='MEDIUM')
-    
+    updated_by = models.ForeignKey(
+                User,
+                null=True,
+                blank=True,
+                on_delete=models.SET_NULL,
+                related_name='updated_projects'
+            )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -120,16 +126,21 @@ class ProjectFile(models.Model):
                         default=uuid.uuid4, 
                         editable=False, 
                         unique=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE,null=True)
-    file = models.FileField(upload_to=project_file_upload_path,null=True)
-    name = models.CharField(max_length=255,null=True)
-    size = models.PositiveIntegerField(null=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True)
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+
+    # 🔥 FIX
+    file_path = models.TextField(null=True)   # absolute path on server
+    file_url = models.TextField(null=True)    # public download URL
+
+    original_name = models.CharField(max_length=255, null=True)
     uploaded_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True
     )
-    created_at = models.DateTimeField(auto_now_add=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     def __str__(self):
         return self.name

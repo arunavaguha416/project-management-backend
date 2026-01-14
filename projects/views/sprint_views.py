@@ -308,3 +308,69 @@ class SprintCapacityView(APIView):
             "status": True,
             "records": data
         }, status=200)
+    
+
+class GetCurrentSprint(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            project_id = request.data.get('project_id')
+
+            if not project_id:
+                return Response(
+                    {'status': False, 'message': 'project_id is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            project = Project.objects.filter(id=project_id).first()
+            if not project:
+                return Response(
+                    {'status': False, 'message': 'Project not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # 🔒 Permission check
+            require_project_viewer(request.user, project)
+
+            # ✅ Current sprint = ACTIVE sprint
+            sprint = Sprint.objects.filter(
+                project=project,
+                status='ACTIVE'
+            ).order_by('-created_at').first()
+
+            if not sprint:
+                return Response(
+                    {
+                        'status': False,
+                        'message': 'No active sprint found'
+                    },
+                    status=status.HTTP_200_OK
+                )
+
+            return Response(
+                {
+                    'status': True,
+                    'records': {
+                        'id': str(sprint.id),
+                        'name': sprint.name,
+                        'description': sprint.description,
+                        'start_date': sprint.start_date,
+                        'end_date': sprint.end_date,
+                        'status': sprint.status,
+                        'goal': sprint.goal,
+                        'velocity': sprint.velocity
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response(
+                {'status': False, 'message': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+
+
+

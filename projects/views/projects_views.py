@@ -11,7 +11,7 @@ from django.utils.text import get_valid_filename
 from django.http import HttpResponse
 from django.utils import timezone
 from projects.models.sprint_model import Sprint
-
+from django.conf import settings
 from io import BytesIO
 from datetime import datetime, date
 import os
@@ -36,6 +36,7 @@ from projects.utils.permissions import (
     require_project_viewer,
     require_project_manager,
     require_project_owner,
+    require_project_manager_or_hr
 )
 
 # ------------------------------------------------------------------
@@ -67,7 +68,7 @@ class ProjectAdd(APIView):
             manager_id = data.get('manager_id')
             if manager_id:
                 manager = Employee.objects.filter(
-                    id=manager_id,
+                    user_id=manager_id,
                     company=company
                 ).first()
 
@@ -83,7 +84,9 @@ class ProjectAdd(APIView):
             project = Project.objects.create(
                 name=data.get('name'),
                 description=data.get('description'),
-                manager=manager
+                manager=manager,
+                start_date = data.get('start_date'),
+                end_date = data.get('end_date'),
             )
 
             # -------------------------------------------------
@@ -212,7 +215,7 @@ class ProjectList(APIView):
 
                 active_sprint = Sprint.objects.filter(
                     project=project,
-                    status='ACTIVE',
+                    status__in=['ACTIVE', 'PLANNED', 'COMPLETED'],
                     deleted_at__isnull=True
                 ).first()
 
@@ -295,10 +298,14 @@ class ProjectDetails(APIView):
         try:
             project = Project.objects.select_related('manager').filter(id=id).first()
             if not project:
-                return Response({'status': False, 'message': 'Not found'}, status=404)
+                return Response(
+                    {'status': False, 'message': 'Not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
 
             require_project_viewer(request.user, project)
 
+            # ---------------- Team members ----------------
             members = ProjectMember.objects.filter(
                 project=project,
                 is_active=True
@@ -313,6 +320,17 @@ class ProjectDetails(APIView):
                 'role': m.role
             } for m in members]
 
+            # ---------------- Files ----------------
+            files = ProjectFile.objects.filter(project=project)
+
+            file_data = [{
+                'id': str(f.id),
+                'name': f.original_name,
+                'url': f.file_url,
+                'uploaded_at': f.uploaded_at.strftime('%Y-%m-%d %H:%M:%S')
+            } for f in files]
+
+            # ---------------- Response ----------------
             data = {
                 'id': str(project.id),
                 'name': project.name,
@@ -322,13 +340,23 @@ class ProjectDetails(APIView):
                 'start_date': project.start_date,
                 'end_date': project.end_date,
                 'status': project.status,
-                'team_members': team_data
+                'team_members': team_data,
+                'files': file_data
             }
 
-            return Response({'status': True, 'records': data})
+            return Response(
+                {'status': True, 'records': data},
+                status=status.HTTP_200_OK
+            )
 
         except Exception as e:
-            return Response({'status': False, 'error': str(e)}, status=400)
+            return Response(
+                {'status': False, 'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        
+
 
 
 # ------------------------------------------------------------------
@@ -341,9 +369,12 @@ class ProjectUpdate(APIView):
         try:
             project = Project.objects.filter(id=request.data.get('id')).first()
             if not project:
-                return Response({'status': False, 'message': 'Project not found'}, status=404)
+                return Response(
+                    {'status': False, 'message': 'Project not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
 
-            require_project_manager(request.user, project)
+            require_project_manager_or_hr(request.user, project)
 
             employee = Employee.objects.filter(user=request.user).first()
             company = employee.company
@@ -358,10 +389,19 @@ class ProjectUpdate(APIView):
                 project.manager = manager
 
             # ---------------- Basic fields ----------------
-            project.name = request.data.get('name', project.name)
-            project.description = request.data.get('description', project.description)
-            project.start_date = request.data.get('start_date', project.start_date)
-            project.end_date = request.data.get('end_date', project.end_date)
+            if 'name' in request.data:
+                project.name = request.data.get('name')
+
+            if 'description' in request.data:
+                project.description = request.data.get('description')
+
+            if 'start_date' in request.data:
+                project.start_date = request.data.get('start_date')
+
+            if 'end_date' in request.data:
+                project.end_date = request.data.get('end_date')
+
+            project.updated_by = request.user
             project.save()
 
             # ---------------- Team update ----------------
@@ -381,7 +421,10 @@ class ProjectUpdate(APIView):
                 ProjectMember.objects.update_or_create(
                     project=project,
                     user=user,
-                    defaults={'role': role, 'is_active': True}
+                    defaults={
+                        'role': role,
+                        'is_active': True
+                    }
                 )
 
             # deactivate removed members (except OWNER)
@@ -394,7 +437,10 @@ class ProjectUpdate(APIView):
             ).update(is_active=False)
 
             return Response(
-                {'status': True, 'message': 'Project updated successfully'},
+                {
+                    'status': True,
+                    'message': 'Project updated successfully'
+                },
                 status=status.HTTP_200_OK
             )
 
@@ -403,6 +449,8 @@ class ProjectUpdate(APIView):
                 {'status': False, 'message': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
 
 
 # ------------------------------------------------------------------
