@@ -160,12 +160,15 @@ def get_sprint_ai_explanation(sprint):
 
     if not hints:
         hints.append("Sprint is healthy — maintain the current pace")
+        
 
     # ---------------------------------------------------
     # Final payload
     # ---------------------------------------------------
     return {
         "final_probability": final_probability,
+        "health_label": get_sprint_health_label(final_probability),
+         
         "summary": summary,
         "hints": hints,
         "signals": {
@@ -196,3 +199,25 @@ def get_sprint_ai_explanation(sprint):
             }
         }
     }
+
+def get_sprint_health_label(prob):
+    if prob >= 85:
+        return "Sprint is healthy and on track"
+    elif prob >= 60:
+        return "Sprint is at risk — monitor closely"
+    return "Sprint is critical — high chance of failure"
+
+def get_sprint_health_alert(prob):
+    if prob < 40:
+        return {
+            "level": "critical",
+            "message": "Sprint health is critical. Immediate action required."
+        }
+
+    if prob < 60:
+        return {
+            "level": "warning",
+            "message": "Sprint is at risk. Monitor progress closely."
+        }
+
+    return None

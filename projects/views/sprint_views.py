@@ -12,7 +12,7 @@ from projects.models.task_model import Task
 from projects.models.comments_model import Comment
 from projects.serializers.sprint_serializer import SprintSerializer
 from projects.models.task_model import TaskStatusHistory
-from projects.utils.sprint_ai_utils import calculate_sprint_ai_completion
+from projects.utils.sprint_ai_utils import calculate_sprint_ai_completion, get_sprint_health_label,get_sprint_health_label
 from projects.utils.permissions import *
 from projects.utils.sprint_capacity_service import calculate_sprint_capacity
 
@@ -177,31 +177,48 @@ class SprintDetails(APIView):
     def post(self, request):
         try:
             sprint = Sprint.objects.select_related('project').filter(
-                id=request.data.get('id')
+                id=request.data.get('id'),
+                deleted_at__isnull=True
             ).first()
 
             if not sprint:
-                return Response({'status': False, 'message': 'Sprint not found'},
-                                status=status.HTTP_200_OK)
+                return Response(
+                    {'status': False, 'message': 'Sprint not found'},
+                    status=status.HTTP_200_OK
+                )
 
             require_project_viewer(request.user, sprint.project)
 
+            # 🧠 AI Health (LIVE calculation)
+            ai_probability = calculate_sprint_ai_completion(sprint)
+            health_alert= get_sprint_health_label(ai_probability)
             record = {
-                'id': sprint.id,
+                'id': str(sprint.id),
                 'name': sprint.name,
                 'description': sprint.description,
                 'start_date': sprint.start_date,
                 'end_date': sprint.end_date,
+                'status': sprint.status,
+
                 'project__id': sprint.project.id,
-                'project__name': sprint.project.name
+                'project__name': sprint.project.name,
+                'health_alert' : health_alert,
+                # 🔥 Health fields
+                'ai_completion_probability': ai_probability,
+                'sprint_health': ai_probability,
+                'health_label': get_sprint_health_label(ai_probability)
             }
 
-            return Response({'status': True, 'records': record},
-                            status=status.HTTP_200_OK)
+            return Response(
+                {'status': True, 'records': record},
+                status=status.HTTP_200_OK
+            )
 
         except Exception as e:
-            return Response({'status': False, 'message': str(e)},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'status': False, 'message': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
 
 # ------------------------------------------------------------------
