@@ -400,9 +400,9 @@ class StatutoryChallanListView(APIView):
                     and today <= c.due_date <= today + timedelta(days=3)
                 )
 
-                grouped[c.challan_type].append({
+                grouped[c.statutory_type].append({
                     "id": c.id,
-                    "type": c.challan_type,
+                    "type": c.statutory_type,
                     "month": c.month,
                     "year": c.year,
                     "amount": float(c.amount),
@@ -410,8 +410,8 @@ class StatutoryChallanListView(APIView):
                     "status": c.status,
                     "due_soon": due_soon,
                     "receipt": c.receipt.url if c.receipt else None,
-                    "payment_reference": c.payment_reference,
-                    "paid_on": c.paid_on,
+                    "payment_reference": c.challan_number,
+                    "paid_on": c.paid_date,
                 })
 
             return Response({

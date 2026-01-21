@@ -25,7 +25,8 @@ urlpatterns = [
 
     # ==================== NEW STREAMLINED LEAVE MANAGEMENT ROUTES ====================
     # Function 1: List leave requests (HR & MANAGER)
-    path('leave-requests/list/', LeaveRequestsList.as_view(), name='leave-requests-list'),    
+    path('leave-requests/list/', LeaveRequestsList.as_view(), name='leave-requests-list'), 
+    path('leave-impact-preview/', LeaveImpactPreview.as_view(), name='leave-impact-preview'),    
     # Function 2: Apply leave (HR, MANAGER, EMPLOYEE)
     path('leave/apply/', ApplyLeave.as_view(), name='apply-leave'),    
     # Function 3: Approve/Reject leave (HR & MANAGER)

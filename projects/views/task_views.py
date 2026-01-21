@@ -436,8 +436,8 @@ class TaskUpdateDetails(APIView):
                 else:
                     task.assigned_to = None
 
-            if "sprint" in data:
-                sprint_id = data.get("sprint")
+            if "sprint_id" in data:
+                sprint_id = data.get("sprint_id")
                 if sprint_id:
                     sprint = Sprint.objects.filter(
                         id=sprint_id,
@@ -527,32 +527,6 @@ class TaskUpdateDetails(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-
-# ------------------------------------------------------------------
-# Task Update – Properties (WRITE)
-# ------------------------------------------------------------------
-class TaskUpdateProperties(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def put(self, request):
-        try:
-            task = Task.objects.select_related('project').filter(id=request.data.get('id')).first()
-            if not task:
-                return Response({'status': False, 'message': 'Task not found'}, status=status.HTTP_200_OK)
-
-            require_project_editor(request.user, task.project)
-
-            serializer = TaskSerializer(task, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({'status': True, 'message': 'Task properties updated successfully'},
-                                status=status.HTTP_200_OK)
-
-            return Response({'status': False, 'message': 'Invalid data', 'errors': serializer.errors},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        except Exception as e:
-            return Response({'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # ------------------------------------------------------------------

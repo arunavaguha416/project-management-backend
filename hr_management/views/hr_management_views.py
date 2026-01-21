@@ -8,11 +8,15 @@ from hr_management.serializers.hr_management_serializer import *
 from django.core.paginator import Paginator
 from datetime import timedelta
 from hr_management.utils.attendance_utils import calculate_overtime_hours, calculate_working_days
+from projects.models.project_member_model import ProjectMember
 from projects.models.project_model import Project, UserMapping
 from django.utils import timezone
 from projects.models.project_model import Project
 from authentication.models.user import User
 from hr_management.models.hr_management_models import Attendance
+from projects.models.sprint_model import Sprint
+from projects.models.task_model import Task
+from projects.utils.sprint_capacity_service import calculate_sprint_capacity
 
 # Employee Views
 class EmployeeAdd(APIView):
@@ -141,7 +145,7 @@ class EmployeeDetails(APIView):
         try:
             employee_id = request.data.get('id')
             if employee_id:
-                employee = Employee.objects.filter(id=employee_id).values('id', 'user__username', 'department', 'phone').first()
+                employee = Employee.objects.filter(id=employee_id).values('id', 'user__name', 'department', 'phone','date_of_joining','salary','designation','company__name').first()
                 if employee:
                     return Response({
                         'status': True,
@@ -1803,3 +1807,119 @@ class AttendanceSummaryView(APIView):
                 "message": "Failed to load attendance summary",
                 "error": str(e)
             }, status=500)
+        
+
+class LeaveImpactPreview(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        request_id = request.data.get("request_id")
+
+        if not request_id:
+            return Response(
+                {"status": False, "message": "request_id is required"},
+                status=400
+            )
+
+        # 1️⃣ Fetch pending leave
+        leave = (
+            LeaveRequest.objects
+            .select_related("employee__user")
+            .filter(id=request_id, status="PENDING")
+            .first()
+        )
+
+        if not leave:
+            return Response(
+                {"status": False, "message": "Pending leave request not found"},
+                status=404
+            )
+
+        employee = leave.employee
+        user = employee.user
+
+        leave_start = leave.start_date
+        leave_end = leave.end_date
+
+        # 2️⃣ Find projects where employee is an active member
+        project_ids = ProjectMember.objects.filter(
+            user=user,
+            is_active=True
+        ).values_list("project_id", flat=True)
+
+        # 3️⃣ Find sprints overlapping with leave window
+        sprints = Sprint.objects.filter(
+            project_id__in=project_ids,
+            start_date__lte=leave_end,
+            end_date__gte=leave_start,
+            deleted_at__isnull=True
+        ).select_related("project")
+
+        sprint_impacts = []
+
+        for sprint in sprints:
+            # 4️⃣ Tasks at risk (assigned to this employee)
+            risky_tasks = Task.objects.filter(
+                sprint=sprint,
+                assigned_to=user,
+                deleted_at__isnull=True
+            ).exclude(status="DONE")
+
+            # 5️⃣ Sprint capacity
+            capacity_data = calculate_sprint_capacity(sprint)
+            total_capacity = capacity_data.get("total_capacity", 0)
+
+            # 6️⃣ Employee load (story points)
+            employee_points = sum(
+                t.story_points or 0 for t in risky_tasks
+            )
+
+            capacity_drop = (
+                round((employee_points / total_capacity) * 100, 1)
+                if total_capacity > 0 else 0
+            )
+
+            sprint_impacts.append({
+                "sprint_id": str(sprint.id),
+                "sprint_name": sprint.name,
+                "project_id": str(sprint.project_id),
+                "period": {
+                    "start": sprint.start_date,
+                    "end": sprint.end_date
+                },
+                "tasks_at_risk_count": risky_tasks.count(),
+                "tasks_at_risk": [
+                    {
+                        "id": str(t.id),
+                        "title": t.title,
+                        "status": t.status,
+                        "story_points": t.story_points
+                    }
+                    for t in risky_tasks
+                ],
+                "capacity": {
+                    "total": total_capacity,
+                    "employee_points": employee_points,
+                    "drop_percent": capacity_drop
+                }
+            })
+
+        # 7️⃣ Final response
+        return Response({
+            "status": True,
+            "employee": {
+                "id": str(employee.id),
+                "name": user.name,
+                "designation": employee.designation
+            },
+            "leave_period": {
+                "start": leave_start,
+                "end": leave_end,
+                "days": (leave_end - leave_start).days + 1
+            },
+            "affected_sprints_count": len(sprint_impacts),
+            "sprints": sprint_impacts
+        })
+    
+
+

@@ -32,11 +32,15 @@ def generate_sprint_plan(sprint, backlog_tasks):
             assignees[best_assignee]["used"] += task.story_points or 0
             suggestions.append({
                 "task_id": str(task.id),
+                "task_title": str(task.title),
                 "assign_to": best_assignee,
                 "story_points": task.story_points
             })
         else:
-            skipped.append(str(task.id))
+            skipped.append({
+                "task_id": str(task.id),
+                "task_title": str(task.title),
+                })
 
     return {
         "suggested_tasks": suggestions,

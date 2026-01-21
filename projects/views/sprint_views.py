@@ -15,7 +15,7 @@ from projects.models.task_model import TaskStatusHistory
 from projects.utils.sprint_ai_utils import calculate_sprint_ai_completion, get_sprint_health_label,get_sprint_health_label
 from projects.utils.permissions import *
 from projects.utils.sprint_capacity_service import calculate_sprint_capacity
-
+from hr_management.utils.hr_sprint_forecasting import *
 # ------------------------------------------------------------------
 # Sprint List (READ)
 # ------------------------------------------------------------------
@@ -391,3 +391,68 @@ class GetCurrentSprint(APIView):
 
 
 
+class SprintForecastView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            sprint_id = request.data.get("sprint_id")
+
+            sprint = Sprint.objects.select_related("project").filter(
+                id=sprint_id,
+                deleted_at__isnull=True
+            ).first()
+
+            if not sprint:
+                return Response(
+                    {"status": False, "message": "Sprint not found"},
+                    status=404
+                )
+
+            require_project_viewer(request.user, sprint.project)
+
+            # 🔹 HR utilities
+            employees = get_project_employees(sprint.project)
+
+            leave_ratio = calculate_leave_ratio(employees, sprint)
+            overtime = calculate_avg_overtime(employees, sprint)
+            attendance = calculate_attendance_score(employees, sprint)
+            capacity_over = is_over_capacity(sprint)
+
+            risk_label = get_risk_label(success_probability)
+
+
+
+            success_probability = sprint.ai_completion_probability or 0
+            forecast = calculate_hr_sprint_risk(sprint.project, sprint)
+
+
+            reasons = []
+            if leave_ratio > 0.3:
+                reasons.append("High leave ratio during sprint")
+            if attendance < 70:
+                reasons.append("Low attendance trend")
+            if overtime > 15:
+                reasons.append("Team showing burnout signs")
+            if capacity_over:
+                reasons.append("Sprint exceeds safe capacity")
+
+            return Response({
+                "status": True,
+                "records": {
+                    "risk_label": risk_label,
+                    "success_probability": success_probability,
+                    "reasons": reasons,
+                    "ai_explanation": (
+                        f"This sprint has a {risk_label.lower()} risk level "
+                        f"based on HR availability, workload balance, and "
+                        f"historical sprint outcomes."
+                    )
+                }
+            })
+
+        except Exception as e:
+            return Response(
+                {"status": False, "message": str(e)},
+                status=400
+            )

@@ -72,11 +72,10 @@ urlpatterns = [
     path('sprints/backlog/', BacklogSimpleList.as_view()),
     path('sprints/start/', SprintStart.as_view()),
     path('sprints/end/', SprintEnd.as_view()),
-    path('task/update/properties/', TaskUpdateProperties.as_view()),
     path("sprint/capacity/", SprintCapacityView.as_view()),
 
     path('sprints/current/', GetCurrentSprint.as_view()), #for empty sprint
-
+    path("sprints/forecast/", SprintForecastView.as_view()),
 
 
 
