@@ -37,7 +37,34 @@ class PayrollRollbackView(APIView):
                     },
                     status=400
                 )
+            if payrun.status != 'FINALIZED':
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Only finalized pay runs can be rolled back"
+                    },
+                    status=400
+                )
 
+            if payrun.status == 'POSTED':
+                return Response(
+                        {
+                            "status": False,
+                            "message": "Payroll already posted"
+                        },
+                        status=400
+                    )
+
+            if payrun.is_locked:
+                return Response(
+                        {
+                            "status": False,
+                            "message": "Pay run is locked"
+                        },
+                        status=400
+                    )
+
+            
             # 🔒 Rollback action
             old_status = payrun.status
             payrun.status = "IN_PROGRESS"

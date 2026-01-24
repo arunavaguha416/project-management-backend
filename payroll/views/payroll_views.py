@@ -828,8 +828,10 @@ class PayRunLockCheckView(APIView):
 
             return Response({
                 'status': True,
-                'locked': pay_run.status in ['FINALIZED', 'POSTED']
+                'locked': pay_run.is_locked or pay_run.status == 'POSTED',
+                'reason': pay_run.locked_reason
             })
+
 
         except Exception as e:
             return Response({

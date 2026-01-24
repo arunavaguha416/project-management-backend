@@ -76,7 +76,9 @@ class PayRun(models.Model):
     total_gross_salary = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     total_deductions = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     total_net_salary = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-
+    status = models.CharField(max_length=255, null=True, blank=True)
+    is_locked = models.BooleanField(default=False)
+    locked_reason = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
