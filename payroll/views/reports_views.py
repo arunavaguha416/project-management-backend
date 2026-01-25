@@ -302,58 +302,76 @@ class StatutoryDashboardView(APIView):
 
     def post(self, request):
         try:
-            month = request.data.get("month")
-            year = request.data.get("year")
+            employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
+
+            if not employee or not employee.company:
+                return Response({"status": False, "message": "Unauthorized"}, status=403)
+
+            if employee.role not in ["HR", "ADMIN"]:
+                return Response(
+                    {"status": False, "message": "Insufficient permissions"},
+                    status=403
+                )
+
+            month = int(request.data.get("month"))
+            year = int(request.data.get("year"))
             financial_year = request.data.get("financial_year")
 
-            # -----------------------------
-            # Base queryset (LOCKED payrolls)
-            # -----------------------------
-            payrolls = Payroll.objects.filter(
-                pay_run__status="FINALIZED"
-            ).select_related("payroll_period")
+            company = employee.company
 
-            # -----------------------------
-            # Monthly Aggregation
-            # -----------------------------
-            monthly = payrolls.filter(
+            # ---------------------------
+            # Monthly (LOCKED payrolls)
+            # ---------------------------
+            monthly_qs = Payroll.objects.filter(
+                employee__company=company,
+                pay_run__status="FINALIZED",
                 payroll_period__start_date__month=month,
                 payroll_period__start_date__year=year
-            ).aggregate(
-                employee_pf=Sum("provident_fund"),
-                professional_tax=Sum("professional_tax"),
-                tds=Sum("income_tax"),
             )
 
-            employee_pf = monthly["employee_pf"] or 0
-            employer_pf = employee_pf  # 12% employer mirror
-            total_pf = employee_pf + employer_pf
+            monthly = monthly_qs.aggregate(
+                pf=Sum("provident_fund"),
+                pt=Sum("professional_tax"),
+                tds=Sum("income_tax")
+            )
 
-            # -----------------------------
-            # Financial Year Aggregation
-            # -----------------------------
-            fy_pf = fy_pt = fy_tds = 0
+            # PF = employee + employer (mirror)
+            monthly_pf = (monthly["pf"] or 0) * 2
 
-            for p in payrolls:
-                fy = get_financial_year(p.payroll_period.start_date)
-                if fy != financial_year:
-                    continue
+            # ---------------------------
+            # FY aggregation (NORMALIZED)
+            # ---------------------------
+            start_year, end_year = map(int, financial_year.split("-"))
 
-                fy_pf += (p.provident_fund * 2)  # employee + employer
-                fy_pt += p.professional_tax
-                fy_tds += p.income_tax
+            fy_qs = Payroll.objects.filter(
+                employee__company=company,
+                pay_run__status="FINALIZED",
+                payroll_period__start_date__year__gte=start_year,
+                payroll_period__start_date__year__lte=end_year
+            )
+
+            fy = fy_qs.aggregate(
+                pf=Sum("provident_fund"),
+                pt=Sum("professional_tax"),
+                tds=Sum("income_tax")
+            )
+
+            fy_pf = (fy["pf"] or 0) * 2
 
             return Response({
                 "status": True,
                 "monthly": {
-                    "pf": total_pf,
-                    "pt": monthly["professional_tax"] or 0,
-                    "tds": monthly["tds"] or 0,
+                    "pf": float(monthly_pf),
+                    "pt": float(monthly["pt"] or 0),
+                    "tds": float(monthly["tds"] or 0),
                 },
                 "year_to_date": {
-                    "pf": fy_pf,
-                    "pt": fy_pt,
-                    "tds": fy_tds,
+                    "pf": float(fy_pf),
+                    "pt": float(fy["pt"] or 0),
+                    "tds": float(fy["tds"] or 0),
                 }
             })
 
@@ -364,6 +382,9 @@ class StatutoryDashboardView(APIView):
                 "error": str(e)
             }, status=500)
 
+
+
+
 class StatutoryChallanListView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -372,7 +393,7 @@ class StatutoryChallanListView(APIView):
             employee = Employee.objects.filter(
                 user=request.user,
                 deleted_at__isnull=True
-            ).first()
+            ).select_related("company").first()
 
             if not employee or not employee.company:
                 return Response(
@@ -389,29 +410,31 @@ class StatutoryChallanListView(APIView):
             grouped = {"PF": [], "PT": [], "TDS": []}
 
             for c in challans:
-                # Auto mark overdue
-                if c.status == "DUE" and c.due_date and c.due_date < today:
-                    c.status = "OVERDUE"
-                    c.save(update_fields=["status"])
+                # ---- COMPUTED STATUS (NO SAVE) ----
+                computed_status = c.status
+                if c.status == "DUE" and c.due_date:
+                    if c.due_date < today:
+                        computed_status = "OVERDUE"
 
                 due_soon = (
-                    c.status == "DUE"
+                    computed_status == "DUE"
                     and c.due_date
                     and today <= c.due_date <= today + timedelta(days=3)
                 )
 
                 grouped[c.statutory_type].append({
-                    "id": c.id,
+                    "id": str(c.id),
                     "type": c.statutory_type,
                     "month": c.month,
                     "year": c.year,
                     "amount": float(c.amount),
                     "due_date": c.due_date,
-                    "status": c.status,
+                    "status": computed_status,
                     "due_soon": due_soon,
                     "receipt": c.receipt.url if c.receipt else None,
                     "payment_reference": c.challan_number,
                     "paid_on": c.paid_date,
+                    "is_locked": c.status == "PAID",  # UI helper
                 })
 
             return Response({
@@ -427,8 +450,9 @@ class StatutoryChallanListView(APIView):
             }, status=500)
 
 
+
 class StatutoryChallanMarkPaidView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, IsAdminUser)
     parser_classes = (MultiPartParser, FormParser)
 
     def post(self, request):
@@ -437,24 +461,25 @@ class StatutoryChallanMarkPaidView(APIView):
             challan_number = request.data.get("challan_number")
             receipt = request.FILES.get("receipt")
 
-            if not challan_id or not receipt:
-                return Response({
-                    "status": False,
-                    "message": "challan_id and receipt are required"
-                }, status=400)
+            if not challan_id or not challan_number or not receipt:
+                return Response(
+                    {"status": False, "message": "All fields required"},
+                    status=400
+                )
 
             challan = StatutoryChallan.objects.get(id=challan_id)
 
             if challan.status == "PAID":
-                return Response({
-                    "status": False,
-                    "message": "Challan already paid"
-                }, status=400)
+                return Response(
+                    {"status": False, "message": "Already paid"},
+                    status=400
+                )
 
-            challan.receipt = receipt
             challan.challan_number = challan_number
+            challan.receipt = receipt
             challan.paid_date = now().date()
             challan.status = "PAID"
+            challan.paid_by = request.user  # ✅ AUDIT
             challan.save()
 
             return Response({
@@ -463,17 +488,11 @@ class StatutoryChallanMarkPaidView(APIView):
             })
 
         except StatutoryChallan.DoesNotExist:
-            return Response({
-                "status": False,
-                "message": "Challan not found"
-            }, status=404)
+            return Response(
+                {"status": False, "message": "Not found"},
+                status=404
+            )
 
-        except Exception as e:
-            return Response({
-                "status": False,
-                "message": "Failed to mark challan as paid",
-                "error": str(e)
-            }, status=500)
 
 
 class BankDisbursementExportView(APIView):
