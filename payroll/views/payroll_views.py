@@ -44,6 +44,7 @@ from payroll.views.payroll_validation import PayrollValidationView
 from payroll.utils.tax_validation import validate_full_tax_slab_set
 from payroll.utils.salary_component_engine import calculate_salary_components
 from payroll.utils.benefits_engine import calculate_benefit_deductions
+from payroll.utils.form16.generator import generate_form16_pdf
 
 
 class PayrollList(APIView):
@@ -1216,6 +1217,7 @@ class Form16DownloadView(APIView):
                 financial_year=financial_year,
                 summary=summary
             )
+
 
             response = HttpResponse(pdf, content_type="application/pdf")
             response["Content-Disposition"] = (

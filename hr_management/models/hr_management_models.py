@@ -14,6 +14,7 @@ class Employee(SoftDeletionModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE,null=True)
     company = models.ForeignKey(Company, on_delete=models.CASCADE, db_index=True,null=True)
     department = models.ForeignKey(Department, on_delete=models.CASCADE, db_index=True,null=True)
+    pan = models.CharField(max_length=100, unique=True, null=True)
     salary = models.CharField(max_length=100, blank=True)
     date_of_joining = models.DateField(null=True, blank=True)
     designation = models.CharField(max_length=100, null=True)
