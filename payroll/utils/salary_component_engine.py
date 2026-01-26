@@ -1,16 +1,19 @@
+# payroll/utils/salary_component_engine.py
+
 from decimal import Decimal
 from payroll.models.salary_component import SalaryComponent
 
-
-def calculate_salary_components(basic_salary: Decimal):
+def calculate_salary_components(basic_salary: Decimal, company=None):
     """
     Returns:
-    - earnings_total
-    - deductions_total
-    - breakdown dict
+    - component_earnings
+    - component_deductions
+    - breakdown (dict)
     """
 
     components = SalaryComponent.objects.filter(
+        company=company,
+        is_active=True,
         deleted_at__isnull=True
     )
 
@@ -18,17 +21,18 @@ def calculate_salary_components(basic_salary: Decimal):
     deductions = Decimal("0.00")
     breakdown = {}
 
-    # First pass: BASIC based
+    # BASIC based
     for comp in components:
         amount = Decimal("0.00")
 
         if comp.calculation_type == "FIXED":
-            # FIXED components assumed to be monthly for now
-            amount = Decimal("0.00")
+            amount = comp.percentage or Decimal("0.00")
 
-        elif comp.calculation_type == "PERCENTAGE":
-            if comp.percentage_of == "BASIC":
-                amount = (basic_salary * comp.percentage / Decimal("100"))
+        elif comp.calculation_type == "PERCENTAGE" and comp.percentage_of == "BASIC":
+            amount = (basic_salary * comp.percentage) / Decimal("100")
+
+        if amount == 0:
+            continue
 
         breakdown[comp.name] = amount
 
@@ -39,11 +43,11 @@ def calculate_salary_components(basic_salary: Decimal):
 
     gross_salary = basic_salary + earnings
 
-    # Second pass: GROSS based
+    # GROSS based
     for comp in components:
         if comp.calculation_type == "PERCENTAGE" and comp.percentage_of == "GROSS":
-            amount = (gross_salary * comp.percentage / Decimal("100"))
-            breakdown[comp.name] += amount
+            amount = (gross_salary * comp.percentage) / Decimal("100")
+            breakdown[comp.name] = breakdown.get(comp.name, 0) + amount
 
             if comp.component_type == "EARNING":
                 earnings += amount

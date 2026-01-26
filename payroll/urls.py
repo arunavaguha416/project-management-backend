@@ -9,6 +9,7 @@ from .views.payroll_validation import *
 from .views.payroll_audit_views import *
 from .views.payroll_rollback import *
 from .views.payroll_period_views import *
+from .views.salary_component import *
 
 urlpatterns = [
     # ===============================
@@ -74,7 +75,11 @@ urlpatterns = [
 
     
     path("audit-trail/", PayrollAuditTrailView.as_view(), name="payroll-audit-trail"),
-    path( "pay-runs/rollback/", PayrollRollbackView.as_view(),    name="payrun-rollback"
-),
+    path( "pay-runs/rollback/", PayrollRollbackView.as_view(),    name="payrun-rollback"),
+
+    path("salary-components/list/", SalaryComponentListView.as_view(), name="payroll-audit-trail"),
+    path( "salary-components/create/", SalaryComponentCreateView.as_view(),    name="payrun-rollback"),
+    path( "salary-components/update/", SalaryComponentUpdateView.as_view(),    name="payrun-rollback"),
+    path( "salary-components/toggle/", SalaryComponentToggleView.as_view(),    name="payrun-rollback"),
 
 ]
