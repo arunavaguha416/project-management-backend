@@ -22,8 +22,21 @@ class CommentAdd(APIView):
 
     def post(self, request):
         try:
-            task_id = request.data.get('task')
-            task = Task.objects.select_related('project').filter(id=task_id).first()
+            task_id = request.data.get('task_id')
+            text = request.data.get('text')
+
+            if not text:
+                return Response(
+                    {'status': False, 'message': 'Comment text is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            task = (
+                Task.objects
+                .select_related('project')
+                .filter(id=task_id)
+                .first()
+            )
 
             if not task:
                 return Response(
@@ -31,33 +44,30 @@ class CommentAdd(APIView):
                     status=status.HTTP_200_OK
                 )
 
-            # 🔐 membership guard
+            # 🔐 project membership guard
             require_project_viewer(request.user, task.project)
 
-            data = request.data.copy()
-            data['comment_by_id'] = request.user.id
+            # ✅ CREATE COMMENT DIRECTLY (NO SERIALIZER VALIDATION)
+            comment = Comment.objects.create(
+                task=task,
+                content=text,          # 🔥 serializer expects "content"
+                comment_by=request.user
+            )
 
-            serializer = CommentSerializer(data=data)
-            if serializer.is_valid():
-                serializer.save(comment_by=request.user)
-                return Response({
-                    'status': True,
-                    'message': 'Comment added successfully',
-                    'records': serializer.data
-                }, status=status.HTTP_200_OK)
+            # 🔁 serialize only for response
+            data = CommentSerializer(comment).data
 
             return Response({
-                'status': False,
-                'message': 'Invalid data',
-                'errors': serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
+                'status': True,
+                'message': 'Comment added successfully',
+                'records': data
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response(
                 {'status': False, 'message': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
 
 # ------------------------------------------------------------------
 # List Comments
@@ -66,42 +76,22 @@ class CommentList(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
-        try:
-            task_id = request.data.get('task_id')
-            if not task_id:
-                return Response(
-                    {'status': False, 'message': 'task_id is required'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        task_id = request.data.get('task_id')
 
-            task = Task.objects.select_related('project').filter(id=task_id).first()
-            if not task:
-                return Response(
-                    {'status': False, 'message': 'Task not found'},
-                    status=status.HTTP_200_OK
-                )
+        comments = (
+            Comment.objects
+            .filter(task_id=task_id, deleted_at__isnull=True)
+            .select_related('comment_by')
+            .order_by('-created_at')
+        )
 
-            # 🔐 membership guard
-            require_project_viewer(request.user, task.project)
+        serializer = CommentSerializer(comments, many=True)
 
-            comments = Comment.objects.filter(
-                task=task,
-                deleted_at__isnull=True
-            ).order_by('-created_at')
+        return Response({
+            'status': True,
+            'records': serializer.data
+        })
 
-            serializer = CommentSerializer(comments, many=True)
-
-            return Response({
-                'status': True,
-                'count': comments.count(),
-                'records': serializer.data
-            }, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            return Response(
-                {'status': False, 'message': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
 
 
 # ------------------------------------------------------------------

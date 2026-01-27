@@ -49,7 +49,12 @@ class SprintTaskList(APIView):
             tasks = Task.objects.filter(
                 sprint=sprint,
                 deleted_at__isnull=True
-            ).order_by('created_at', 'id')
+            ).order_by('status', 'order', 'created_at')
+
+            for i, task in enumerate(tasks):
+                if task.order is None:
+                    task.order = i
+                    task.save(update_fields=["order"])
 
             serializer = TaskSerializer(tasks, many=True)
 
@@ -591,12 +596,9 @@ class TaskMove(APIView):
 
     def post(self, request):
         try:
-            # --------------------------------------------------
-            # Fetch task (project resolved here)
-            # --------------------------------------------------
-            task = Task.objects.select_related('project', 'sprint').filter(
-                id=request.data.get('id')
-            ).first()
+            task = Task.objects.select_related(
+                'project', 'sprint'
+            ).filter(id=request.data.get('id')).first()
 
             if not task:
                 return Response(
@@ -604,21 +606,21 @@ class TaskMove(APIView):
                     status=status.HTTP_200_OK
                 )
 
-            # --------------------------------------------------
-            # Project RBAC (existing rule)
-            # --------------------------------------------------
             require_project_editor(request.user, task.project)
 
-            sprint_id = request.data.get('sprint_id')
+            # 🚫 Sprint mutation not allowed from board
+            if 'sprint_id' in request.data:
+                return Response({
+                    'status': False,
+                    'message': 'Sprint change not allowed from board'
+                }, status=status.HTTP_200_OK)
+
             new_status = request.data.get('status')
             new_order = request.data.get('order', task.order)
 
             old_status = task.status
-            old_sprint = task.sprint
 
-            # --------------------------------------------------
-            # 🔥 WORKFLOW VALIDATION (status change only)
-            # --------------------------------------------------
+            # 🔐 Workflow validation (unchanged)
             if new_status and new_status != old_status:
                 validate_task_transition(
                     task=task,
@@ -626,35 +628,12 @@ class TaskMove(APIView):
                     user=request.user
                 )
 
-            # --------------------------------------------------
-            # Sprint change (cross-project safe)
-            # --------------------------------------------------
-            if sprint_id:
-                sprint = Sprint.objects.filter(
-                    id=sprint_id,
-                    project=task.project
-                ).first()
-
-                if not sprint:
-                    return Response(
-                        {'status': False, 'message': 'Invalid sprint'},
-                        status=status.HTTP_200_OK
-                    )
-
-                task.sprint = sprint
-            else:
-                task.sprint = None
-
-            # --------------------------------------------------
-            # Update task fields
-            # --------------------------------------------------
+            # ✅ Board-safe updates only
             task.status = new_status or task.status
             task.order = new_order
-            task.save()
+            task.save(update_fields=["status", "order", "updated_at"])
 
-            # --------------------------------------------------
-            # 🔥 AUDIT LOG (TaskStatusHistory)
-            # --------------------------------------------------
+            # 🧾 History (same style)
             if new_status and old_status != new_status:
                 TaskStatusHistory.objects.create(
                     task=task,
@@ -666,7 +645,7 @@ class TaskMove(APIView):
                 )
 
             return Response(
-                {'status': True, 'message': 'Task moved successfully'},
+                {'status': True, 'message': 'Task updated'},
                 status=status.HTTP_200_OK
             )
 
@@ -675,6 +654,7 @@ class TaskMove(APIView):
                 {'status': False, 'message': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
 
 
 # ------------------------------------------------------------------
@@ -721,3 +701,4 @@ class RestoreTask(APIView):
 
         except Exception as e:
             return Response({'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+

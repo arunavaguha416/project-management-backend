@@ -39,6 +39,13 @@ class AddTaskToSprint(APIView):
                     {"status": False, "message": "Task not found"},
                     status=status.HTTP_200_OK
                 )
+            
+            if task.sprint_id:
+                return Response({
+                    "status": False,
+                    "message": "Task already in sprint"
+                }, status=200)
+
 
             sprint = Sprint.objects.filter(id=sprint_id).first()
             if not sprint:
@@ -115,6 +122,9 @@ class RemoveTaskFromSprint(APIView):
                     {"status": False, "message": "Cannot modify a completed sprint"},
                     status=status.HTTP_200_OK
                 )
+            
+       
+
 
             # 🔐 RBAC
             require_project_editor(request.user, task.project)
