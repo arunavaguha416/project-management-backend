@@ -10,4 +10,5 @@ urlpatterns = [
     path('entries/add/', ManualTimeEntry.as_view(), name='manual-time-entry'),
     path('entries/update/', TimeEntryUpdate.as_view(), name='time-entry-update'),
     path('entries/delete/<uuid:entry_id>/', TimeEntryDelete.as_view(), name='time-entry-delete'),
+    path('users/list/', TimeTrackingUserList.as_view(), name='time-tracking-user-list'),
 ]

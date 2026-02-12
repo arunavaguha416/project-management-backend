@@ -414,17 +414,14 @@ class SprintForecastView(APIView):
             # 🔹 HR utilities
             employees = get_project_employees(sprint.project)
 
-            leave_ratio = calculate_leave_ratio(employees, sprint)
-            overtime = calculate_avg_overtime(employees, sprint)
-            attendance = calculate_attendance_score(employees, sprint)
+            leave_ratio = calculate_team_leave_ratio(employees, sprint)
+            overtime = calculate_team_avg_overtime(employees, sprint)
+            attendance = calculate_team_attendance_score(employees, sprint)
             capacity_over = is_over_capacity(sprint)
-
-            risk_label = get_risk_label(success_probability)
-
-
-
-            success_probability = sprint.ai_completion_probability or 0
             forecast = calculate_hr_sprint_risk(sprint.project, sprint)
+            success_probability = sprint.ai_completion_probability or calculate_sprint_ai_completion(sprint)
+            risk_label = forecast.get("risk") if isinstance(forecast, dict) else get_risk_label(success_probability)
+            risk_score = forecast.get("score", success_probability) if isinstance(forecast, dict) else success_probability
 
 
             reasons = []
@@ -441,7 +438,9 @@ class SprintForecastView(APIView):
                 "status": True,
                 "records": {
                     "risk_label": risk_label,
+                    "risk_score": risk_score,
                     "success_probability": success_probability,
+                    "signals": forecast.get("signals", {}) if isinstance(forecast, dict) else {},
                     "reasons": reasons,
                     "ai_explanation": (
                         f"This sprint has a {risk_label.lower()} risk level "

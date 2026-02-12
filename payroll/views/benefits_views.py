@@ -72,10 +72,16 @@ class BenefitPlanList(APIView):
 
 
 class BenefitPlanAdd(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
+            if request.user.role not in ['HR', 'ADMIN']:
+                return Response({
+                    'status': False,
+                    'message': 'Insufficient permissions'
+                }, status=status.HTTP_403_FORBIDDEN)
+
             serializer = BenefitPlanSerializer(data=request.data)
             if serializer.is_valid():
                 plan = serializer.save()

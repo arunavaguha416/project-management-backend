@@ -38,6 +38,7 @@ from projects.utils.permissions import (
     require_project_owner,
     require_project_manager_or_hr
 )
+from projects.utils.project_ai_utils import calculate_project_health
 
 # ------------------------------------------------------------------
 # Project Add
@@ -219,6 +220,24 @@ class ProjectList(APIView):
                     deleted_at__isnull=True
                 ).first()
 
+                task_stats = Task.objects.filter(
+                    project=project,
+                    deleted_at__isnull=True
+                ).aggregate(
+                    total=Count('id'),
+                    done=Count('id', filter=Q(status='DONE')),
+                    in_progress=Count('id', filter=Q(status='IN_PROGRESS')),
+                    in_review=Count('id', filter=Q(status='IN_REVIEW')),
+                    todo=Count('id', filter=Q(status='TODO')),
+                    blocked=Count('id', filter=Q(status='BLOCKED')),
+                    overdue=Count(
+                        'id',
+                        filter=Q(due_date__lt=date.today()) & ~Q(status='DONE')
+                    )
+                )
+
+                ai_health = calculate_project_health(project)
+
                 project_data.append({
                     'id': str(project.id),
                     'name': project.name,
@@ -237,6 +256,8 @@ class ProjectList(APIView):
                         'active_sprint_id': str(active_sprint.id) if active_sprint else None,
                         'active_sprint_name': active_sprint.name if active_sprint else None
                     },
+                    'task_stats': task_stats,
+                    'ai_health': ai_health,
                     'created_at': project.created_at.strftime('%Y-%m-%d %H:%M:%S'),
                     'updated_at': project.updated_at.strftime('%Y-%m-%d %H:%M:%S')
                 })

@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from django.db.models import Q
+from django.db import transaction, IntegrityError
 from hr_management.models.hr_management_models import *
 from hr_management.serializers.hr_management_serializer import *
 from django.core.paginator import Paginator
@@ -24,18 +25,92 @@ class EmployeeAdd(APIView):
 
     def post(self, request):
         try:
-            serializer = EmployeeSerializer(data=request.data)
-            if serializer.is_valid():
-                serializer.save()
+            with transaction.atomic():
+                payload = request.data.copy()
+
+                if not payload.get('company_id'):
+                    current_employee = Employee.objects.filter(user=request.user, deleted_at__isnull=True).first()
+                    if current_employee and current_employee.company_id:
+                        payload['company_id'] = str(current_employee.company_id)
+
+                if not payload.get('company_id'):
+                    return Response({
+                        'status': False,
+                        'message': 'Company is required to add employee'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+                created_user = None
+                user_id = payload.get('user_id')
+
+                if not user_id:
+                    required_user_fields = ['name', 'email', 'username', 'password']
+                    missing = [f for f in required_user_fields if not str(payload.get(f, '')).strip()]
+                    if missing:
+                        return Response({
+                            'status': False,
+                            'message': f"Missing required user fields: {', '.join(missing)}"
+                        }, status=status.HTTP_400_BAD_REQUEST)
+
+                    if User.objects.filter(email=payload.get('email').strip()).exists():
+                        return Response({
+                            'status': False,
+                            'message': 'Email already exists'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+
+                    if User.objects.filter(username=payload.get('username').strip()).exists():
+                        return Response({
+                            'status': False,
+                            'message': 'Username already exists'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+
+                    created_user = User.objects.create_user(
+                        email=payload.get('email').strip(),
+                        name=payload.get('name').strip(),
+                        username=payload.get('username').strip(),
+                        password=payload.get('password'),
+                        role=payload.get('role', User.userRole.USER),
+                        date_of_birth=payload.get('date_of_birth') or None,
+                    )
+                    payload['user_id'] = str(created_user.id)
+                else:
+                    existing_user = User.objects.filter(id=user_id).first()
+                    if not existing_user:
+                        return Response({
+                            'status': False,
+                            'message': 'Provided user not found'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+
+                employee_payload = {
+                    'user_id': payload.get('user_id'),
+                    'company_id': payload.get('company_id'),
+                    'department_id': payload.get('department_id') or None,
+                    'salary': payload.get('salary') or None,
+                    'date_of_joining': payload.get('date_of_joining') or None,
+                    'designation': payload.get('designation') or None
+                }
+
+                serializer = EmployeeSerializer(data=employee_payload)
+                if serializer.is_valid():
+                    serializer.save()
+                    return Response({
+                        'status': True,
+                        'message': 'Employee added successfully',
+                        'records': serializer.data
+                    }, status=status.HTTP_200_OK)
+
+                if created_user:
+                    created_user.delete()
+
                 return Response({
-                    'status': True,
-                    'message': 'Employee added successfully',
-                    'records': serializer.data
-                }, status=status.HTTP_200_OK)
+                    'status': False,
+                    'message': 'Invalid data',
+                    'errors': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except IntegrityError as e:
             return Response({
                 'status': False,
-                'message': 'Invalid data',
-                'errors': serializer.errors
+                'message': 'Duplicate user data',
+                'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({
@@ -54,15 +129,38 @@ class EmployeeList(APIView):
             page_size = int(search_data.get('page_size', 10))
             search_employee = search_data.get('search', '')
 
-            query = Q()
+            current_employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
+            if not current_employee or not current_employee.company:
+                return Response({
+                    'status': False,
+                    'message': 'Company context not found for current user',
+                    'count': 0,
+                    'records': []
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            query = Q(company=current_employee.company, deleted_at__isnull=True)
+
+            # Role based scope:
+            # - HR/ADMIN: all employees in company
+            # - MANAGER: only team members
+            # - EMPLOYEE/other: self only
+            if request.user.role == 'MANAGER':
+                team_employees = _get_manager_team_employees(request.user)
+                query &= Q(id__in=team_employees.values_list('id', flat=True))
+            elif request.user.role not in ['HR', 'ADMIN']:
+                query &= Q(user=request.user)
+
             if search_employee:
                 # Search across Employee model fields AND related User fields
                 query &= (
                     Q(user__name__icontains=search_employee)
                     | Q(user__username__icontains=search_employee)
                     | Q(user__email__icontains=search_employee)
-                    
-                ) & Q(user__role__icontains="MANAGER")
+                    | Q(designation__icontains=search_employee)
+                )
 
             employees = Employee.objects.filter(query).order_by('-created_at')
 
@@ -77,6 +175,7 @@ class EmployeeList(APIView):
                     'status': True,
                     'count': paginator.count,
                     'num_pages': paginator.num_pages,
+                    'current_page': paginated_employees.number,
                     'records': serializer.data
                 }, status=status.HTTP_200_OK)
             else:
@@ -112,7 +211,7 @@ class DeletedEmployeeList(APIView):
             if employees.exists():
                 if page is not None:
                     paginator = Paginator(employees, page_size)
-                    paginatedEmployees = paginator.get_paginator(page)
+                    paginatedEmployees = paginator.get_page(page)
                     serializer = EmployeeSerializer(paginatedEmployees, many=True)
                     return Response({
                         'status': True,
@@ -145,7 +244,23 @@ class EmployeeDetails(APIView):
         try:
             employee_id = request.data.get('id')
             if employee_id:
-                employee = Employee.objects.filter(id=employee_id).values('id', 'user__name', 'department', 'phone','date_of_joining','salary','designation','company__name').first()
+                employee = Employee.objects.filter(id=employee_id).values(
+                    'id',
+                    'user_id',
+                    'company_id',
+                    'department_id',
+                    'user__name',
+                    'user__email',
+                    'user__username',
+                    'user__role',
+                    'user__date_of_birth',
+                    'department__name',
+                    'phone',
+                    'date_of_joining',
+                    'salary',
+                    'designation',
+                    'company__name'
+                ).first()
                 if employee:
                     return Response({
                         'status': True,
@@ -175,18 +290,66 @@ class EmployeeUpdate(APIView):
             employee_id = request.data.get('id')
             employee = Employee.objects.filter(id=employee_id).first()
             if employee:
-                serializer = EmployeeSerializer(employee, data=request.data, partial=True)
-                if serializer.is_valid():
-                    serializer.save()
+                with transaction.atomic():
+                    user = employee.user
+                    name = request.data.get('name')
+                    email = request.data.get('email')
+                    username = request.data.get('username')
+                    role = request.data.get('role')
+                    date_of_birth = request.data.get('date_of_birth')
+                    password = request.data.get('password')
+
+                    if user:
+                        if name is not None:
+                            user.name = name
+
+                        if email is not None and email != user.email:
+                            if User.objects.filter(email=email).exclude(id=user.id).exists():
+                                return Response({
+                                    'status': False,
+                                    'message': 'Email already exists'
+                                }, status=status.HTTP_400_BAD_REQUEST)
+                            user.email = email
+
+                        if username is not None and username != user.username:
+                            if User.objects.filter(username=username).exclude(id=user.id).exists():
+                                return Response({
+                                    'status': False,
+                                    'message': 'Username already exists'
+                                }, status=status.HTTP_400_BAD_REQUEST)
+                            user.username = username
+
+                        if role is not None:
+                            user.role = role
+
+                        if date_of_birth is not None:
+                            user.date_of_birth = date_of_birth or None
+
+                        if password:
+                            user.set_password(password)
+
+                        user.save()
+
+                    employee_payload = {
+                        'department_id': request.data.get('department_id'),
+                        'salary': request.data.get('salary'),
+                        'date_of_joining': request.data.get('date_of_joining'),
+                        'designation': request.data.get('designation')
+                    }
+
+                    serializer = EmployeeSerializer(employee, data=employee_payload, partial=True)
+                    if serializer.is_valid():
+                        serializer.save()
+                        return Response({
+                            'status': True,
+                            'message': 'Employee updated successfully'
+                        }, status=status.HTTP_200_OK)
+
                     return Response({
-                        'status': True,
-                        'message': 'Employee updated successfully'
-                    }, status=status.HTTP_200_OK)
-                return Response({
-                    'status': False,
-                    'message': 'Invalid data',
-                    'errors': serializer.errors
-                }, status=status.HTTP_400_BAD_REQUEST)
+                        'status': False,
+                        'message': 'Invalid data',
+                        'errors': serializer.errors
+                    }, status=status.HTTP_400_BAD_REQUEST)
             return Response({
                 'status': False,
                 'message': 'Employee not found'
@@ -813,6 +976,27 @@ class BulkAssignProjects(APIView):
 
  
 
+def _get_manager_team_employees(manager_user):
+    manager_employee = Employee.objects.filter(user=manager_user, deleted_at__isnull=True).first()
+    if not manager_employee:
+        return Employee.objects.none()
+
+    managed_projects = Project.objects.filter(
+        manager=manager_employee,
+        deleted_at__isnull=True
+    )
+    member_user_ids = ProjectMember.objects.filter(
+        project__in=managed_projects,
+        is_active=True
+    ).values_list('user_id', flat=True)
+
+    return Employee.objects.filter(
+        company=manager_employee.company,
+        user_id__in=member_user_ids,
+        deleted_at__isnull=True
+    ).exclude(user=manager_user).distinct()
+
+
 class LeaveRequestsList(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -838,34 +1022,54 @@ class LeaveRequestsList(APIView):
             # Build base query
             query = Q()
             team_info = {}
+            current_employee = Employee.objects.filter(
+                user=user,
+                deleted_at__isnull=True
+            ).first()
+            if not current_employee or not current_employee.company:
+                return Response({
+                    'status': False,
+                    'message': 'Company context not found for current user'
+                }, status=status.HTTP_403_FORBIDDEN)
             
             if user.role == 'HR':
                 # HR can see ALL leave requests
-                query = Q()
+                query = Q(
+                    employee__company=current_employee.company,
+                    employee__deleted_at__isnull=True
+                )
                 team_info['scope'] = 'All Employees'
-                team_info['total_employees'] = Employee.objects.filter(deleted_at__isnull=True).count()
+                team_info['total_employees'] = Employee.objects.filter(
+                    company=current_employee.company,
+                    deleted_at__isnull=True
+                ).count()
                 
             elif user.role == 'MANAGER':
                 # MANAGER can only see their team members' requests
-                manager_employee = Employee.objects.filter(user=user).first()
-                if not manager_employee:
+                team_employees = _get_manager_team_employees(user)
+                if not team_employees.exists():
                     return Response({
-                        'status': False,
-                        'message': 'Manager employee record not found'
-                    }, status=status.HTTP_404_NOT_FOUND)
-                
-                # Get all projects managed by this manager
-                managed_projects = Project.objects.filter(manager=manager_employee)
-                
-                # Get team members from managed projects
-                team_members_query = ''
-                
-                # Get employees who are team members or resources
-                team_employees = Employee.objects.filter(
-                    Q(user_id__in=team_members_query) |
-                    Q(id__in=managed_projects.values_list('resource_id', flat=True)),
-                    deleted_at__isnull=True
-                ).distinct()
+                        'status': True,
+                        'message': 'No team members found for this manager',
+                        'count': 0,
+                        'num_pages': 0,
+                        'current_page': page,
+                        'records': [],
+                        'stats': {
+                            'total_requests': 0,
+                            'approved': 0,
+                            'rejected': 0,
+                            'pending': 0,
+                            'total_days_requested': 0,
+                            'total_days_approved': 0
+                        },
+                        'user_info': {
+                            'role': user.role,
+                            'name': user.name,
+                            'scope': 'Your Team Members',
+                            'total_employees': 0
+                        }
+                    }, status=status.HTTP_200_OK)
                 
                 query = Q(employee__in=team_employees)
                 team_info['scope'] = 'Your Team Members'
@@ -873,14 +1077,7 @@ class LeaveRequestsList(APIView):
                 
             elif user.role == 'EMPLOYEE':
                 # EMPLOYEE can only see their own requests
-                employee = Employee.objects.filter(user=user).first()
-                if not employee:
-                    return Response({
-                        'status': False,
-                        'message': 'Employee record not found'
-                    }, status=status.HTTP_404_NOT_FOUND)
-                
-                query = Q(employee=employee)
+                query = Q(employee=current_employee)
                 team_info['scope'] = 'My Requests'
             
             # Apply additional filters
@@ -960,6 +1157,7 @@ class LeaveRequestsList(APIView):
                         'end_date': leave.end_date.strftime('%Y-%m-%d') if leave.end_date else None,
                         'days_requested': days_requested,
                         'reason': leave.reason,
+                        'leave_type': leave.leave_type,
                         'status': leave.status,
                         'applied_on': leave.created_at.strftime('%Y-%m-%d %H:%M:%S') if leave.created_at else None,
                         'can_approve': leave.status == 'PENDING',
@@ -1014,10 +1212,11 @@ class LeaveRequestsList(APIView):
             
             else:
                 return Response({
-                    'status': False,
+                    'status': True,
                     'message': 'No leave requests found',
                     'count': 0,
                     'num_pages': 0,
+                    'current_page': page,
                     'records': [],
                     'stats': {
                         'total_requests': 0,
@@ -1056,6 +1255,7 @@ class ApplyLeave(APIView):
             start_date = request.data.get('start_date')
             end_date = request.data.get('end_date')
             reason = request.data.get('reason', '').strip()
+            leave_type_raw = (request.data.get('leave_type') or request.data.get('type') or 'CASUAL').strip().upper()
             employee_id = request.data.get('employee_id')  # Optional: for HR/MANAGER to apply on behalf
             
             # Validation
@@ -1079,16 +1279,12 @@ class ApplyLeave(APIView):
                 
                 # For MANAGER, verify the employee is in their team
                 if user.role == 'MANAGER':
-                    manager_employee = Employee.objects.filter(user=user).first()
-                    if manager_employee:
-                        managed_projects = Project.objects.filter(manager=manager_employee)
-                        team_members = {}
-                        
-                        if target_employee.user_id not in team_members:
-                            return Response({
-                                'status': False,
-                                'message': 'You can only apply leave for your team members'
-                            }, status=status.HTTP_403_FORBIDDEN)
+                    team_employees = _get_manager_team_employees(user)
+                    if not team_employees.filter(id=target_employee.id).exists():
+                        return Response({
+                            'status': False,
+                            'message': 'You can only apply leave for your team members'
+                        }, status=status.HTTP_403_FORBIDDEN)
             else:
                 # User applying for themselves
                 target_employee = Employee.objects.filter(user=user).first()
@@ -1150,9 +1346,17 @@ class ApplyLeave(APIView):
                     'message': 'You have overlapping leave requests for the selected dates'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
+            allowed_leave_types = [choice[0] for choice in LeaveRequest.LEAVE_TYPES]
+            if leave_type_raw not in allowed_leave_types:
+                return Response({
+                    'status': False,
+                    'message': f'Invalid leave_type. Allowed values: {", ".join(allowed_leave_types)}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             # Create leave request
             leave_request = LeaveRequest.objects.create(
                 employee=target_employee,
+                leave_type=leave_type_raw,
                 start_date=start_date_obj,
                 end_date=end_date_obj,
                 reason=reason,
@@ -1168,6 +1372,7 @@ class ApplyLeave(APIView):
                     'start_date': leave_request.start_date.strftime('%Y-%m-%d'),
                     'end_date': leave_request.end_date.strftime('%Y-%m-%d'),
                     'days_requested': days_requested,
+                    'leave_type': leave_request.leave_type,
                     'reason': leave_request.reason,
                     'status': leave_request.status,
                     'current_balance': current_balance,
@@ -1236,23 +1441,14 @@ class ApproveRejectLeave(APIView):
             
             # For MANAGER: verify permission to approve this request
             if user.role == 'MANAGER':
-                manager_employee = Employee.objects.filter(user=user).first()
-                if not manager_employee:
+                team_employees = _get_manager_team_employees(user)
+                if not team_employees.exists():
                     return Response({
                         'status': False,
-                        'message': 'Manager employee record not found'
+                        'message': 'No team members found for this manager'
                     }, status=status.HTTP_404_NOT_FOUND)
-                
-                # Check if employee is in manager's team
-                managed_projects = Project.objects.filter(manager=manager_employee)
-                team_members = {}
-                
-                is_team_member = (
-                    leave_request.employee.user_id in team_members or
-                    managed_projects.filter(resource=leave_request.employee).exists()
-                )
-                
-                if not is_team_member:
+
+                if not team_employees.filter(id=leave_request.employee.id).exists():
                     return Response({
                         'status': False,
                         'message': 'You can only approve/reject leave requests from your team members'
@@ -1451,22 +1647,14 @@ class EmployeeLeaveBalance(APIView):
             
             # For MANAGER: verify employee is in their team
             if user.role == 'MANAGER':
-                manager_employee = Employee.objects.filter(user=user).first()
-                if not manager_employee:
+                team_employees = _get_manager_team_employees(user)
+                if not team_employees.exists():
                     return Response({
                         'status': False,
-                        'message': 'Manager employee record not found'
+                        'message': 'No team members found for this manager'
                     }, status=status.HTTP_404_NOT_FOUND)
-                
-                managed_projects = Project.objects.filter(manager=manager_employee)
-                team_members = {}
-                
-                is_team_member = (
-                    target_employee.user_id in team_members or
-                    managed_projects.filter(resource=target_employee).exists()
-                )
-                
-                if not is_team_member:
+
+                if not team_employees.filter(id=target_employee.id).exists():
                     return Response({
                         'status': False,
                         'message': 'You can only view leave balance for your team members'
@@ -1510,6 +1698,7 @@ class EmployeeLeaveBalance(APIView):
                 days = (req.end_date - req.start_date).days + 1
                 recent_requests_data.append({
                     'id': str(req.id),
+                    'leave_type': req.leave_type,
                     'start_date': req.start_date.strftime('%Y-%m-%d'),
                     'end_date': req.end_date.strftime('%Y-%m-%d'),
                     'days': days,
@@ -1575,20 +1764,39 @@ class HRDashboardMetrics(APIView):
         try:
             department_name = request.query_params.get('department', '')
             time_range = request.query_params.get('timeRange', 'year')
-            employee_qs = Employee.objects.all()
-            leave_qs = LeaveRequest.objects.all()
-            attendance_qs = Attendance.objects.all()
+
+            current_employee = Employee.objects.filter(
+                user=request.user,
+                deleted_at__isnull=True
+            ).first()
+            if not current_employee or not current_employee.company:
+                return Response({
+                    'status': False,
+                    'message': 'Company context not found for current user'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            company = current_employee.company
+
+            employee_qs = Employee.objects.filter(
+                company=company,
+                deleted_at__isnull=True
+            )
+            leave_qs = LeaveRequest.objects.filter(
+                employee__company=company,
+                deleted_at__isnull=True
+            )
+            attendance_qs = Attendance.objects.filter(
+                employee__company=company
+            )
 
             # Apply time range filter
             current_date = timezone.now()
             if time_range == 'month':
                 start_date = current_date - timedelta(days=30)
-                employee_qs = employee_qs.filter(date_of_joining__gte=start_date)
                 leave_qs = leave_qs.filter(start_date__gte=start_date)
                 attendance_qs = attendance_qs.filter(date__gte=start_date)
             elif time_range == 'year':
                 start_date = current_date - timedelta(days=365)
-                employee_qs = employee_qs.filter(date_of_joining__gte=start_date)
                 leave_qs = leave_qs.filter(start_date__gte=start_date)
                 attendance_qs = attendance_qs.filter(date__gte=start_date)
 
@@ -1623,7 +1831,10 @@ class HRDashboardMetrics(APIView):
             avg_salary = total_salary / len(salaries) if salaries else 0
 
             # Department count
-            dept_qs = Department.objects.all()
+            dept_qs = Department.objects.filter(
+                employee__company=company,
+                employee__deleted_at__isnull=True
+            ).distinct()
             if department_name:
                 dept_qs = dept_qs.filter(name=department_name)
             dept_count = dept_qs.count()
@@ -1631,8 +1842,15 @@ class HRDashboardMetrics(APIView):
             # Bar heights - employees per department
             bar_heights = []
             max_emp = 1
-            for d in Department.objects.all():
-                count = Employee.objects.filter(department=d).count()
+            for d in Department.objects.filter(
+                employee__company=company,
+                employee__deleted_at__isnull=True
+            ).distinct():
+                count = Employee.objects.filter(
+                    company=company,
+                    department=d,
+                    deleted_at__isnull=True
+                ).count()
                 bar_heights.append(count)
                 if count > max_emp:
                     max_emp = count
@@ -1643,7 +1861,10 @@ class HRDashboardMetrics(APIView):
             months = 12 if time_range == 'year' else (1 if time_range == 'month' else 24)
             for m in range(1, months + 1):
                 month_date = current_date - timedelta(days=30 * (12 - m)) if time_range == 'year' else current_date
-                count = Employee.objects.filter(date_of_joining__month=month_date.month, date_of_joining__year=month_date.year).count()
+                count = employee_qs.filter(
+                    date_of_joining__month=month_date.month,
+                    date_of_joining__year=month_date.year
+                ).count()
                 y = 50 - count * 5  # Arbitrary scaling for SVG
                 line_points.append(y)
             line_str = ''
@@ -1686,14 +1907,22 @@ class HRDashboardMetrics(APIView):
             turnover_data = []
             for m in range(1, 7):  # Last 6 months
                 month_date = current_date - timedelta(days=30 * (6 - m))
-                terminated = Employee.objects.filter(deleted_at__month=month_date.month, deleted_at__year=month_date.year).count()
-                total = Employee.objects.filter(date_of_joining__lte=month_date).count()
+                terminated = Employee.all_objects.filter(
+                    company=company,
+                    deleted_at__month=month_date.month,
+                    deleted_at__year=month_date.year
+                ).count()
+                total = Employee.objects.filter(
+                    company=company,
+                    deleted_at__isnull=True,
+                    date_of_joining__lte=month_date
+                ).count()
                 rate = round((terminated / total * 100), 1) if total > 0 else 0
                 turnover_data.append({"month": month_date.strftime('%b'), "rate": rate})
 
             # Title and filters
-            company_name = Employee.objects.first().company.name if Employee.objects.exists() and Employee.objects.first().company else 'HR Dashboard'
-            filter_options = list(Department.objects.values_list('name', flat=True))
+            company_name = company.name if company else 'HR Dashboard'
+            filter_options = list(dept_qs.values_list('name', flat=True))
 
             data = {
                 "title": company_name,
@@ -1725,7 +1954,8 @@ class HRDashboardMetrics(APIView):
             return Response({
                 'status': True,
                 'message': 'Dashboard metrics retrieved successfully',
-                'data': data
+                'data': data,
+                'records': data
             }, status=status.HTTP_200_OK)
 
         except Exception as e:

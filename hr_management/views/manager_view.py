@@ -15,6 +15,7 @@ from hr_management.models.hr_management_models import (
 from hr_management.serializers.hr_management_serializer import EmployeeSerializer
 from projects.models.project_model import Project
 from projects.models.sprint_model import Sprint
+from projects.models.project_member_model import ProjectMember
 
 
 
@@ -63,12 +64,15 @@ class ManagerDashboardMetrics(APIView):
             # -------------------------------------------------
             # Teams under managed projects
             # -------------------------------------------------
-            teams = []
-
             # -------------------------------------------------
-            # Team members (ONLY via TeamMembersMapping)
+            # Team members (via ProjectMember mapping)
             # -------------------------------------------------
-            team_user_ids = []
+            team_user_ids = ProjectMember.objects.filter(
+                project__in=managed_projects,
+                is_active=True
+            ).exclude(
+                user=request.user
+            ).values_list('user_id', flat=True).distinct()
 
             team_employees = Employee.objects.filter(
                 user_id__in=team_user_ids,
@@ -191,7 +195,13 @@ class ManagerDashboardMetrics(APIView):
             return Response(
                 {
                     'status': True,
-                    'records': data
+                    'records': data,
+                    # compatibility keys for clients that read top-level fields
+                    'metrics': data.get('metrics', {}),
+                    'attendance_summary': data.get('attendance_summary', {}),
+                    'pending_leaves': data.get('pending_leaves', []),
+                    'team_members': data.get('team_members', []),
+                    'workload': data.get('workload', {})
                 },
                 status=status.HTTP_200_OK
             )

@@ -10,22 +10,22 @@ def generate_sprint_forecast(project, sprint=None):
 
     # ---------------- HR DATA ----------------
     employees = get_project_employees(project)
-    leave_ratio = calculate_leave_ratio(employees)
+    leave_ratio = calculate_team_leave_ratio(employees, sprint) if sprint else 0
 
     if leave_ratio > 0.2:
         score -= 20
         reasons.append("High team leave during sprint window")
 
-    if is_manager_on_leave(project):
+    if sprint and is_manager_on_leave(project, sprint):
         score -= 25
         reasons.append("Project manager unavailable")
 
-    overtime = calculate_avg_overtime(employees)
+    overtime = calculate_team_avg_overtime(employees, sprint) if sprint else 0
     if overtime > 15:
         score -= 10
         reasons.append("Team overtime burnout risk")
 
-    attendance = calculate_attendance_score(employees)
+    attendance = calculate_team_attendance_score(employees, sprint) if sprint else 100
     if attendance < 90:
         score -= 15
         reasons.append("Low team attendance trend")

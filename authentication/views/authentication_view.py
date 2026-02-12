@@ -164,11 +164,21 @@ class Logout(APIView):
         Handle POST request for user logout. Blacklists the user's refresh token to prevent further use.
         """
         try:
-            refresh_token = request.data['refresh']
+            refresh_token = request.data.get('refresh')
+            if not refresh_token:
+                return Response({
+                    'status': False,
+                    'message': 'Refresh token not provided'
+                }, status=status.HTTP_206_PARTIAL_CONTENT)
+
             token = RefreshToken(refresh_token)
-            
-            # Blacklist the refresh token
-            token.blacklist()
+
+            # Blacklist the refresh token (if blacklist app installed)
+            try:
+                token.blacklist()
+            except Exception:
+                # If blacklist not available, treat as best-effort logout
+                pass
             
             return Response({
                 'status': True,

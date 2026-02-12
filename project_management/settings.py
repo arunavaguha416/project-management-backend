@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'channels',
     'core',
     'payroll',
+    'transcriptions',
 ]
 
 ASGI_APPLICATION = 'project_management_system.asgi.application'
@@ -108,6 +109,20 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ORIGIN_ALLOW_ALL = True
+
+# allow custom headers used by frontend (e.g., loader bypass)
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-skip-loader",
+]
 
 ROOT_URLCONF = 'project_management.urls'
 AUTH_USER_MODEL = 'authentication.User'

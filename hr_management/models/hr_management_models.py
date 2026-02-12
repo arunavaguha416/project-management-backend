@@ -60,9 +60,18 @@ class LeaveRequest(SoftDeletionModel):
         ('APPROVED', 'Approved'),
         ('REJECTED', 'Rejected'),
     )
+    LEAVE_TYPES = (
+        ('CASUAL', 'Casual'),
+        ('SICK', 'Sick'),
+        ('EARNED', 'Earned'),
+        ('MATERNITY', 'Maternity'),
+        ('PATERNITY', 'Paternity'),
+        ('OTHER', 'Other'),
+    )
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    leave_type = models.CharField(max_length=20, choices=LEAVE_TYPES, default='CASUAL')
     start_date = models.DateField()
     end_date = models.DateField()
     reason = models.TextField(blank=True)

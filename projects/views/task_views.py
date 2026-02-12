@@ -146,9 +146,25 @@ class BacklogSimpleList(APIView):
                 project=project,
                 sprint__isnull=True,
                 deleted_at__isnull=True
-            ).values('id', 'title')
+            ).select_related('assigned_to', 'epic').order_by('created_at')
 
-            return Response({'status': True, 'records': list(tasks)}, status=status.HTTP_200_OK)
+            records = []
+            for t in tasks:
+                records.append({
+                    'id': str(t.id),
+                    'title': t.title,
+                    'status': t.status,
+                    'priority': t.priority,
+                    'story_points': t.story_points,
+                    'due_date': t.due_date,
+                    'labels': t.labels,
+                    'assignee_name': t.assigned_to.name if t.assigned_to else None,
+                    'epic_name': t.epic.name if t.epic else None,
+                    'project_id': str(project.id),
+                    'project_name': project.name
+                })
+
+            return Response({'status': True, 'records': records}, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({'status': False, 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -596,58 +612,75 @@ class TaskMove(APIView):
 
     def post(self, request):
         try:
-            task = Task.objects.select_related(
-                'project', 'sprint'
-            ).filter(id=request.data.get('id')).first()
+            task_id = request.data.get('id')
+            new_status = request.data.get('status')
+            new_order = request.data.get('order')
 
+            if not task_id or new_status is None or new_order is None:
+                return Response(
+                    {'status': False, 'message': 'Invalid payload'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            task = Task.objects.select_related('project', 'sprint').filter(id=task_id).first()
             if not task:
                 return Response(
                     {'status': False, 'message': 'Task not found'},
                     status=status.HTTP_200_OK
                 )
 
-            require_project_editor(request.user, task.project)
+            # 🔐 Permission check
+            require_project_viewer(request.user, task.project)
 
-            # 🚫 Sprint mutation not allowed from board
-            if 'sprint_id' in request.data:
-                return Response({
-                    'status': False,
-                    'message': 'Sprint change not allowed from board'
-                }, status=status.HTTP_200_OK)
-
-            new_status = request.data.get('status')
-            new_order = request.data.get('order', task.order)
-
+            sprint = task.sprint
             old_status = task.status
 
-            # 🔐 Workflow validation (unchanged)
-            if new_status and new_status != old_status:
-                validate_task_transition(
-                    task=task,
-                    new_status=new_status,
-                    user=request.user
-                )
-
-            # ✅ Board-safe updates only
-            task.status = new_status or task.status
-            task.order = new_order
-            task.save(update_fields=["status", "order", "updated_at"])
-
-            # 🧾 History (same style)
-            if new_status and old_status != new_status:
-                TaskStatusHistory.objects.create(
-                    task=task,
-                    from_status=old_status,
-                    to_status=new_status,
-                    changed_by=request.user,
-                    sprint_id=str(task.sprint.id) if task.sprint else None,
-                    project_id=str(task.project.id)
-                )
-
-            return Response(
-                {'status': True, 'message': 'Task updated'},
-                status=status.HTTP_200_OK
+            # ----------------------------
+            # 1️⃣ Remove from old column
+            # ----------------------------
+            old_tasks = list(
+                Task.objects.filter(
+                    sprint=sprint,
+                    status=old_status
+                ).exclude(id=task.id).order_by('order')
             )
+
+            # normalize old column
+            for idx, t in enumerate(old_tasks):
+                if t.order != idx:
+                    t.order = idx
+                    t.save(update_fields=['order'])
+
+            # ----------------------------
+            # 2️⃣ Insert into new column
+            # ----------------------------
+            new_tasks = list(
+                Task.objects.filter(
+                    sprint=sprint,
+                    status=new_status
+                ).exclude(id=task.id).order_by('order')
+            )
+
+            # clamp index
+            new_order = max(0, min(new_order, len(new_tasks)))
+
+            new_tasks.insert(new_order, task)
+
+            # update task status
+            task.status = new_status
+            task.sprint = sprint
+            task.save(update_fields=['status'])
+
+            # normalize destination column
+            for idx, t in enumerate(new_tasks):
+                if t.order != idx or t.id == task.id:
+                    t.order = idx
+                    t.save(update_fields=['order'])
+
+            return Response({
+                'status': True,
+                'message': 'Task moved successfully'
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response(

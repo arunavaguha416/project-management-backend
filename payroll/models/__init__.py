@@ -9,6 +9,9 @@ from .expense_models import *
 # Import all benefits-related models
 from .benefits_models import *
 
+# Import all loan/advance models
+from .loan_models import *
+
 # Make all models available when importing from models package
 __all__ = [
     # Payroll Models
@@ -25,4 +28,7 @@ __all__ = [
     'BenefitPlan',
     'BenefitEnrollment',
     'TaxConfiguration',
+
+    # Loan Models
+    'LoanAdvance',
 ]

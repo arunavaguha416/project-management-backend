@@ -66,8 +66,7 @@ urlpatterns = [
     
     path('sprints/summary/', SprintSummary.as_view(), name='sprints-summary'),
     
-    path('sprints/tasks/', SprintTaskList.as_view()),
-    path('task/move/', TaskMove.as_view()),
+    path('sprints/tasks/', SprintTaskList.as_view(), name='sprint_task_list'),
     # path('tasks/list/', ProjectTasksList.as_view()),
     path('sprints/backlog/', BacklogSimpleList.as_view()),
     path('sprints/start/', SprintStart.as_view()),
@@ -80,8 +79,7 @@ urlpatterns = [
 
 
     path('task/add/', TaskAdd.as_view(), name='task_add'),
-    path('sprints/tasks/', SprintTaskList.as_view(), name='sprint_task_list'),
-     path('task/backlog/', BacklogTaskList.as_view(), name='backlog_task_list'),
+    path('task/backlog/', BacklogTaskList.as_view(), name='backlog_task_list'),
     path('task/details/', TaskDetails.as_view(), name='task_details'),
     path('task/move/', TaskMove.as_view(), name='task_move'),
     path('task/update/', TaskUpdateDetails.as_view(), name='task-update'),
@@ -151,6 +149,8 @@ urlpatterns = [
 
     path("sprint/ai/explanation/", SprintAIExplanationView.as_view() ),
     path("sprint/ai/trend/", SprintAITrendView.as_view()),
+    path("sprint/ai/brief/", SprintAIBriefView.as_view()),
+    path("sprint/ai/chat/", SprintAIChatView.as_view()),
 
     # Convert AI preview → actual sprint + backlog tasks
     path("sprints/ai/commit/", SprintAICommit.as_view()),
@@ -172,10 +172,13 @@ urlpatterns = [
 
     # projects/urls.py
 
-    path('files/upload', ProjectFileUpload.as_view()),
-    path('files/delete', ProjectFileDelete.as_view()),
-    path('files/list', ProjectFileList.as_view()),
+    path('files/upload/', ProjectFileUpload.as_view()),
+    path('files/delete/', ProjectFileDelete.as_view()),
+    path('files/list/', ProjectFileList.as_view()),
     path('files/download/<uuid:file_id>/', ProjectFileDownload.as_view(),),
+
+    # Backward-compatible alias
+    path('tasks/list/', ProjectTasksList.as_view(), name='project-tasks-list-legacy'),
 
 
 ]

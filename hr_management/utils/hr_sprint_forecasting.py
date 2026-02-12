@@ -1,13 +1,13 @@
 from hr_management.models.hr_management_models import Employee
-from projects.models.project_member_model import ProjectMember
 from hr_management.models.hr_management_models import LeaveRequest
 from hr_management.models.hr_management_models import Attendance
 from hr_management.utils.attendance_utils import calculate_overtime_hours
-from hr_management.models.hr_management_models import Attendance
+from projects.models.project_member_model import ProjectMember
 from projects.utils.sprint_capacity_service import calculate_sprint_capacity
 
-def calculate_avg_overtime(employees, sprint):
-    if not sprint.start_date or not sprint.end_date:
+
+def calculate_team_avg_overtime(employees, sprint):
+    if not sprint or not sprint.start_date or not sprint.end_date:
         return 0
 
     total = 0
@@ -24,9 +24,8 @@ def calculate_avg_overtime(employees, sprint):
     return round(total / max(count, 1), 2)
 
 
-
-def calculate_attendance_score(employees, sprint):
-    if not sprint.start_date or not sprint.end_date:
+def calculate_team_attendance_score(employees, sprint):
+    if not sprint or not sprint.start_date or not sprint.end_date:
         return 100
 
     sprint_days = (sprint.end_date - sprint.start_date).days + 1
@@ -45,7 +44,6 @@ def calculate_attendance_score(employees, sprint):
     return round(total_score / max(employees.count(), 1), 1)
 
 
-
 def get_project_employees(project):
     """
     Returns active employees assigned to a project
@@ -61,8 +59,7 @@ def get_project_employees(project):
     )
 
 
-
-def calculate_leave_ratio(employees, sprint):
+def calculate_team_leave_ratio(employees, sprint):
     if not sprint or not sprint.start_date or not sprint.end_date:
         return 0
 
@@ -97,22 +94,6 @@ def is_manager_on_leave(project, sprint):
     ).exists()
 
 
-
-
-def calculate_avg_overtime(employee, sprint):
-    attendances = Attendance.objects.filter(
-        employee=employee,
-        date__range=(sprint.start_date, sprint.end_date)
-    )
-
-    total_overtime = calculate_overtime_hours(attendances)
-    sprint_days = max(attendances.count(), 1)
-
-    return round(total_overtime / sprint_days, 2)
-
-
-
-
 def is_over_capacity(sprint):
     capacity = calculate_sprint_capacity(sprint)
 
@@ -122,6 +103,7 @@ def is_over_capacity(sprint):
     )
 
     return planned_points > capacity.get("total_capacity", 0)
+
 
 def get_risk_label(score):
     if score >= 85:
@@ -143,16 +125,12 @@ def calculate_hr_sprint_risk(project, sprint):
             "reason": "No team members assigned"
         }
 
-    leave_penalty = 0
-    attendance_score = 0
-    overtime_penalty = 0
+    leave_ratio = calculate_team_leave_ratio(employees, sprint)
+    avg_attendance = calculate_team_attendance_score(employees, sprint)
+    avg_overtime = calculate_team_avg_overtime(employees, sprint)
 
-    for emp in employees:
-        leave_penalty += calculate_leave_ratio(emp, sprint) * 20
-        attendance_score += calculate_attendance_score(emp, sprint)
-        overtime_penalty += min(calculate_avg_overtime(emp, sprint) * 5, 15)
-
-    avg_attendance = attendance_score / employees.count()
+    leave_penalty = leave_ratio * 20
+    overtime_penalty = min(avg_overtime * 5, 15)
 
     manager_penalty = 15 if is_manager_on_leave(project, sprint) else 0
     capacity_penalty = 20 if is_over_capacity(sprint) else 0
@@ -175,6 +153,8 @@ def calculate_hr_sprint_risk(project, sprint):
         "signals": {
             "manager_on_leave": manager_penalty > 0,
             "over_capacity": capacity_penalty > 0,
-            "avg_attendance": round(avg_attendance, 1)
+            "avg_attendance": round(avg_attendance, 1),
+            "leave_ratio": round(leave_ratio, 2),
+            "avg_overtime": round(avg_overtime, 2)
         }
     }
