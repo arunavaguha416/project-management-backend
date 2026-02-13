@@ -10,16 +10,9 @@ from projects.models.workflow_model import (
     WorkflowTransition
 )
 from projects.utils.permissions import (
-    require_project_owner,
+    require_project_manager_or_hr,
+    
 )
-
-# ---------------------------------------------------------
-# Helper: owner OR global admin
-# ---------------------------------------------------------
-def require_workflow_admin(user, project):
-    if user.role == 'ADMIN':
-        return
-    require_project_owner(user, project)
 
 
 # ---------------------------------------------------------
@@ -37,7 +30,7 @@ class WorkflowDetails(APIView):
                     status=status.HTTP_200_OK
                 )
 
-            require_workflow_admin(request.user, project)
+            require_project_manager_or_hr(request.user, project)
 
             workflow = getattr(project, 'workflow', None)
             if not workflow:
@@ -106,7 +99,7 @@ class WorkflowStatusUpsert(APIView):
                     status=status.HTTP_200_OK
                 )
 
-            require_workflow_admin(request.user, project)
+            require_project_manager_or_hr(request.user, project)
 
             workflow = project.workflow
 
@@ -159,7 +152,7 @@ class WorkflowStatusDelete(APIView):
                     status=status.HTTP_200_OK
                 )
 
-            require_workflow_admin(request.user, status_obj.workflow.project)
+            require_project_manager_or_hr(request.user, status_obj.workflow.project)
 
             status_obj.delete()
             return Response(
@@ -189,7 +182,7 @@ class WorkflowTransitionUpsert(APIView):
                     status=status.HTTP_200_OK
                 )
 
-            require_workflow_admin(request.user, project)
+            require_project_manager_or_hr(request.user, project)
 
             workflow = project.workflow
 
@@ -258,7 +251,7 @@ class WorkflowTransitionDelete(APIView):
                     status=status.HTTP_200_OK
                 )
 
-            require_workflow_admin(request.user, transition.workflow.project)
+            require_project_manager_or_hr(request.user, transition.workflow.project)
 
             transition.delete()
             return Response(
